@@ -8,8 +8,8 @@ It will cover the following sections:
 1. Rails API creation
 2. GraphQL setup
 3. GraphQL types & Active Record Models
-4. GraphQL relations
-5. GrapgQL resolvers
+4. GraphQL resolvers
+5. GraphQL relations
 6. GraphQL mutations
 7. Authentication with JWT in a Rails API + GraphQL context
 
@@ -143,7 +143,170 @@ rails db:create db:migrate db:seed
 
 Your DB is now setup.
 
-## 4. GraphQL relations
-## 5. GrapgQL resolvers
+### Generate the graphQL types
+The graphQL types will ensure that the data type of each model is visible in your front-end app, ensuring it's correct usage both in back and front-end.
+
+Let's start by creating the necessary graphQL objects to ensure we can make a query to get all blogs. The query would look like this:
+
+```graphql
+query Blogs {
+  blogs {
+    title
+    description
+  }
+}
+```
+
+In order to be able to perform a query to the graphql endpoint (`/graphql` defined in the `routes.rb`), we need to generate the blogs type:
+```sh
+rails g graphql:object blog
+```
+
+This will generate a `blog_type.rb` in the `types` folder:
+```ruby
+module Types
+  class BlogType < Types::BaseObject
+    field :id, ID, null: false
+    field :title, String
+    field :description, String
+    field :user_id, Integer
+    field :created_at, GraphQL::Types::ISO8601DateTime, null: false
+    field :updated_at, GraphQL::Types::ISO8601DateTime, null: false
+  end
+end
+```
+
+We need to move the file to the `types` > `models` folder and add a module `Models` around it:
+```ruby
+module Types
+  module Models
+    class BlogType < Types::BaseObject
+      field :id, ID, null: false
+      field :title, String
+      field :description, String
+      field :user_id, Integer
+      field :created_at, GraphQL::Types::ISO8601DateTime, null: false
+      field :updated_at, GraphQL::Types::ISO8601DateTime, null: false
+    end
+  end
+end
+```
+
+We cannot yet do the intended query, because we need to state how to resolve this query in the resolvers.
+
+## 4. GraphQL resolvers
+
+### Get All Blogs
+Create a resolver for the getting all the blogs in the `resolvers` folder, call it `blogs_resolver.rb`:
+```ruby
+module Resolvers
+  class BlogsResolver < BaseResolver
+    description "Get all blogs."
+
+    type [Types::Models::BlogType], null: false
+
+    def resolve
+      ::Blog.all
+    end
+  end
+end
+```
+
+Now we just need to add in the `query_type.rb` the field **blogs** pointing to the resolver `blogs_resolver`:
+```ruby
+field :blogs, resolver: Resolvers::BlogsResolver
+``` 
+
+We can now do the query to the graphQL endpoint and it will return to us the specified fields for all the blogs.
+
+### Get a Blog by ID
+Same process, create a resolver for getting the blog under `resolvers`, called `blog_resolver.rb`:
+```ruby
+module Resolvers
+  class BlogResolver < BaseResolver
+    description "Get a blog by ID."
+    
+    argument :id, ID, required: true
+
+    type Types::Models::BlogType, null: true
+    
+    def resolve(id:)
+      ::Blog.find_by(id:)
+    end
+  end
+end
+```
+
+Now we just need to add in the `query_type.rb` the field **blog** pointing to the resolver `blog_resolver`:
+```ruby
+field :blog, resolver: Resolvers::BlogResolver
+``` 
+
+We can now get a blog info by providing its id:
+```graphql
+query Blog {
+  blog(id: 1) {
+    title
+    description
+  }
+}
+```
+
+## 5. GraphQL relations
+Let's now try to get the user associated to the blogs. We want to be able to do a query like this:
+```graphql
+query Blogs {
+  blogs {
+    title
+    description
+    user {
+      id
+      email
+      fullName
+    }
+  }
+}
+```
+
+### Add the relation in the types
+In the `blog_type.rb` substitute the `user_id` field by:
+```ruby
+field :user, UserType, null: false
+```
+
+This will ensure the relation is established and the user type is of UserType (that we already created by doing `rails g graphql:object user`).
+
+We can now do the desired query with no problems.
+
+### What if we want to get all blogs associated to that user?
+Imagine we now wanted to get all blogs, each blog showing the user that wrote it but also every blogs associated to that user as well. We want to be able to do a query like this:
+```graphql
+query Blogs {
+  blogs {
+    title
+    description
+    user {
+      id
+      email
+      fullName
+      blogs {
+        id
+        title
+      }
+    }
+  }
+}
+```
+
+For that, we just need to add the following field to the `user_type.rb`:
+```ruby
+field :blogs, [BlogType]
+``` 
+
+Now we can either get the user associated to a blog, or the blogs associated to a user.
+
 ## 6. GraphQL mutations
+
+
 ## 7. Authentication with JWT in a Rails API + GraphQL context
+

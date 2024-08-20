@@ -1,5 +1,5 @@
 # 💎 RAILS API + 🕸️ GRAPHQL
-<span style="background: rgba(100, 120, 100); border-radius: 10px; padding: 8px 12px;">**v0.1** - 20.08.2024</span> 
+<span style="background: rgba(100, 120, 100); border-radius: 10px; padding: 8px 12px;">***v0.1** - 20.08.2024*</span> 
 
 This project aims at providing detailed guidelines to create a Rails API with GraphQL.
 

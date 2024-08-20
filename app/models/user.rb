@@ -1,5 +1,7 @@
 class User < ApplicationRecord
   has_many :blogs, dependent: :destroy
+  has_many :reviews, dependent: :destroy
+  
   before_save { self.email = email.downcase }
 
   def full_name

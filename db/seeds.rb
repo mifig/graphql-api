@@ -8,6 +8,10 @@
 #     MovieGenre.find_or_create_by!(name: genre_name)
 #   end
 
+User.destroy_all
+Blog.destroy_all
+Review.destroy_all
+
 5.times do
   first_name = Faker::Name.first_name
   User.create!(first_name:, last_name: Faker::Name.last_name, email: "#{first_name}@test.com")
@@ -15,4 +19,8 @@ end
 
 20.times do
   Blog.create!(title: Faker::Book.title, description: Faker::Lorem.paragraphs(number: 3), user: User.find(User.ids.sample))
+end
+
+30.times do 
+  Review.create!(content: Faker::GreekPhilosophers.quote, user: User.find(User.ids.sample), blog: Blog.find(Blog.ids.sample))
 end

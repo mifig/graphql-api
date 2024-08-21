@@ -9,9 +9,10 @@ It will cover the following sections:
 2. GraphQL setup
 3. GraphQL types & Active Record Models
 4. GraphQL resolvers
-5. GraphQL relations
-6. GraphQL mutations
-7. Authentication with JWT in a Rails API + GraphQL context
+5. GraphQL encrypt IDs
+6. GraphQL relations
+7. GraphQL mutations
+8. Authentication with JWT in a Rails API + GraphQL context
 
 > 🚨 This tutorial assumes a basic knowledge of graphQL operations. Refer to [this tutorial](https://www.youtube.com/playlist?list=PL4cUxeGkcC9gUxtblNUahcsg0WLxmrK_y) to gain an understanding of graphQL before jumping to this project. It should take approximately 2 hours.
 
@@ -252,7 +253,64 @@ query Blog {
 }
 ```
 
-## 5. GraphQL relations
+## 5. GraphQL encrypt IDs
+Add method `id` to `base.object.rb` type:
+```ruby
+module Types
+  class BaseObject < GraphQL::Schema::Object
+    edge_type_class(Types::BaseEdge)
+    connection_type_class(Types::BaseConnection)
+    field_class Types::BaseField
+    
+    def id
+      object.to_gid_param
+    end
+  end
+end
+```
+
+Update resolvers or mutations to handle the id (substitute id for user_id):
+```ruby
+module Resolvers
+  class UserResolver < BaseResolver
+    description "Get a user by ID."
+    
+    argument :user_id, ID, required: true, loads: Types::Models::UserType
+
+    type Types::Models::UserType, null: true
+    
+    def resolve(user:)
+      user
+    end
+  end
+end
+```
+
+Change schema method `self.resolve_type` to:
+```ruby
+def self.resolve_type(abstract_type, obj, ctx)
+  # TODO: Implement this method
+  # to return the correct GraphQL object type for `obj`
+  abstract_type
+end
+```
+
+Queries will now return an encrypted id, and we need to send the encrypted id as well to get the instance (we also need to user user_id now instead of id):
+```graphql
+query User {
+  user(userId: "Z2lkOi8vZ3JhcGhxbC1hcGkvVXNlci8xMA") {
+    createdAt
+    email
+    firstName
+    fullName
+    id
+    lastName
+    updatedAt
+  }
+}
+```
+
+## 6. GraphQL relations
 Let's now try to get the user associated to the blogs. We want to be able to do a query like this:
 ```graphql
 query Blogs {
@@ -305,8 +363,8 @@ field :blogs, [BlogType]
 
 Now we can either get the user associated to a blog, or the blogs associated to a user.
 
-## 6. GraphQL mutations
-### 6.1 CREATE
+## 7. GraphQL mutations
+### 7.1 CREATE
 To generate a create mutation, for example to create a new blog, we can use graphql generator in the command line:
 
 ```sh
@@ -388,7 +446,7 @@ with the variables:
 }
 ```
 
-### 6.2 DESTROY
+### 7.2 DESTROY
 We will follow the same process, but now for destroying a blog:
 ```sh
 rails g graphql:mutation_delete blog
@@ -434,7 +492,7 @@ with the id variable:
 }
 ```
 
-### 6.3 UPDATE
+### 7.3 UPDATE
 Create mutation:
 ```sh
 rails g graphql:mutation_update blog
@@ -498,7 +556,7 @@ with variables:
 }
 ```
 
-## 7. Authentication with JWT in a Rails API + GraphQL context
+## 8. Authentication with JWT in a Rails API + GraphQL context
 In order to have the authentication functionality up and running, the first thing we need to do is to:
 - Comment out the `gem "bcrypt", "~> 3.1.7"` in our gemfile and run `bundle install` in the command line.
 
@@ -534,3 +592,4 @@ We just need now to add the `gem 'jwt'` to our gemfile so that we can authentica
 - [Data Manipulation: A Dive into GraphQL Mutations in Rails 7 API](https://medium.com/simform-engineering/data-manipulation-a-dive-into-graphql-mutations-in-rails-7-api-bca1f7f00bab)
 - [Unlocking GraphQL's Power with Rails: What No One's Told You Yet!](https://www.youtube.com/watch?v=nnHYfNRGFKQ)
 - [Rails magic: has_secure_password](https://medium.com/geekculture/rails-magic-has-secure-password-a9bf0167642d)
+- [User Authentication by JWT for Rails GraphQL API](https://blog.stackademic.com/user-authentication-by-jwt-for-rails-graphql-api-fa1aa4ba1039)

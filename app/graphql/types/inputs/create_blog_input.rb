@@ -2,7 +2,7 @@
 
 module Types
   module Inputs
-    class BlogInput < Types::BaseInputObject
+    class CreateBlogInput < Types::BaseInputObject
       description "Attributes for creating a blog"
 
       argument :title, String, required: true

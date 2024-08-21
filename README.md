@@ -307,18 +307,18 @@ Now we can either get the user associated to a blog, or the blogs associated to 
 
 ## 6. GraphQL mutations
 ### 6.1 CREATE
-To generate a mutation, for example to create a new blog, we can use graphql generator in the command line:
+To generate a create mutation, for example to create a new blog, we can use graphql generator in the command line:
 
 ```sh
-rails g graphql:mutation CreateBlog
+rails g graphql:mutation_create blog
 ```
 
 This will:
-- Create the `create_blog.rb` mutation file within `app/graphql/mutations`;
+- Create the `blog_create.rb` mutation file within `app/graphql/mutations`;
 - Add the ruby code
 
   ```ruby
-  field :create_blog, mutation: Mutations::CreateBlog
+  field :blog_create, mutation: Mutations::BlogCreate
   ``` 
   within the `mutation_type.rb` file, creating a field mapped to this resolver for the mutation type, which is present in the `app/graphql/types` folder.
 
@@ -327,11 +327,11 @@ Let's now generate the input attributes that we accept when creating a blog. We 
 rails g graphql:input inputs/create_blog
 ```
 
-In the created `create_blog_input_type.rb` file, add the accepted arguments. Also add the `Module Inputs` and change the name of the file and class to `CreateBlogInput`:
+In the created `create_blog_input.rb` file, add the accepted arguments. Also add the `Module Inputs` and change the name of the file and class to `CreateBlogInput`:
 ```ruby
 module Types
   module Inputs
-    class BlogInput < Types::BaseInputObject
+    class CreateBlogInput < Types::BaseInputObject
       description "Attributes for creating a blog"
 
       argument :title, String, required: true
@@ -345,29 +345,18 @@ end
 Now we just need to edit the mutation resolver to tailor our needs:
 ```ruby
 module Mutations
-  class CreateBlog < BaseMutation
-    # TODO: define arguments
-    argument :data, Types::Inputs::BlogInput, required: true
-    
-    # TODO: define return fields
-    field :blog, Types::Models::BlogType
-    field :errors, [String], null: false
+  class BlogCreate < BaseMutation
+    description "Creates a new blog"
 
-    # TODO: define resolve method
+    field :blog, Types::Models::BlogType, null: false
+
+    argument :data, Types::Inputs::CreateBlogInput, required: true
+
     def resolve(data:)
-      blog = Blog.new(title: data.title, description: data.description, user_id: data.user_id)
+      blog = ::Blog.new(**data)
+      raise GraphQL::ExecutionError.new "Error creating blog", extensions: blog.errors.to_hash unless blog.save
 
-      if blog.save
-        {
-          blog: blog,
-          errors: []
-        }
-      else
-        {
-          blog: nil,
-          errors: blog.errors.full_messages
-        }
-      end
+      { blog: blog }
     end
   end
 end
@@ -375,8 +364,8 @@ end
 
 Finally, we are able to do the intended query:
 ```graphql
-mutation CreateBlog($data: BlogInput!) {
-  createBlog(input: { data: $data}) {
+mutation CreateBlog($data: CreateBlogInput!) {
+  blogCreate(input: { data: $data }) {
     blog {
       createdAt
       description
@@ -384,7 +373,6 @@ mutation CreateBlog($data: BlogInput!) {
       title
       updatedAt
     }
-    errors
   }
 }
 ```
@@ -403,37 +391,26 @@ with the variables:
 ### 6.2 DESTROY
 We will follow the same process, but now for destroying a blog:
 ```sh
-rails g graphql:mutation DestroyBlog
+rails g graphql:mutation_delete blog
 ```
 
-The `field :destroy_blog, mutation: Mutations::DestroyBlog` will automatically be added to the `mutation_type.rb` file.
+The `field :blog_delete, mutation: Mutations::BlogDelete` will automatically be added to the `mutation_type.rb` file.
 
-In the mutation `destroy_blog.rb` just add:
+In the mutation `blog_delete.rb` just add:
 ```ruby
 module Mutations
-  class DestroyBlog < BaseMutation
-    # TODO: define return fields
-    field :blog, BlogType
-    field :errors, [String], null: false
+  class BlogDelete < BaseMutation
+    description "Deletes a blog by ID"
 
-    # TODO: define arguments
+    field :blog, Types::Models::BlogType, null: false
+
     argument :id, ID, required: true
 
-    # TODO: define resolve method
     def resolve(id:)
-      blog = Blog.find(id)
+      blog = ::Blog.find(id)
+      raise GraphQL::ExecutionError.new "Error deleting blog", extensions: blog.errors.to_hash unless blog.destroy!
 
-      if blog.destroy
-        {
-          blog: blog,
-          errors: []
-        }
-      else
-        {
-          blog: nil,
-          errors: blog.errors.full_messages
-        }
-      end
+      { blog: blog }
     end
   end
 end
@@ -442,15 +419,12 @@ end
 We can now destroy a blog, as such:
 ```graphql
 mutation DestroyBlog($id: ID!) {
-    destroyBlog(input: { id: $id }) {
-        blog {
-            title,
-            user {
-                fullName
-            }
-        }
-        errors
+  blogDelete(input: { id: $id }) {
+    blog {
+      title
+      description
     }
+  }
 }
 ```
 with the id variable:
@@ -461,7 +435,74 @@ with the id variable:
 ```
 
 ### 6.3 UPDATE
+Create mutation:
+```sh
+rails g graphql:mutation_update blog
+```
 
+Edit mutation file:
+```ruby
+module Mutations
+  class BlogUpdate < BaseMutation
+    description "Updates a blog by id"
+
+    field :blog, Types::Models::BlogType, null: false
+
+    argument :id, ID, required: true
+    argument :data, Types::Inputs::UpdateBlogInput, required: true
+
+
+    def resolve(id:, data:)
+      blog = ::Blog.find(id)
+      raise GraphQL::ExecutionError.new "Error updating blog", extensions: blog.errors.to_hash unless blog.update(**data)
+
+      { blog: blog }
+    end
+  end
+end
+```
+
+Create Input for blog in `update_blog_input.rb`:
+```ruby
+module Types
+  module Inputs
+    class UpdateBlogInput < Types::BaseInputObject
+      description "Attributes for updating a blog"
+
+      argument :title, String, required: false
+      argument :description, String, required: false
+      argument :user_id, ID, required: false
+    end
+  end
+end
+```
+
+Now we can do the query to update a blog:
+```graphql
+mutation UpdateBlog($id: ID!, $data: UpdateBlogInput!) {
+  blogUpdate(input: { id: $id, data: $data }) {
+    blog {
+      title
+      description
+    }
+  }
+}
+```
+with variables:
+```json
+{
+    "data": {
+        "title": "Newer blog 😄"
+    },
+    "id": 26
+}
+```
 
 ## 7. Authentication with JWT in a Rails API + GraphQL context
 
+
+## References
+- [GraphQL Gem](https://graphql-ruby.org/)
+- [How To GraphQL-Ruby Tutorial](https://www.howtographql.com/graphql-ruby/0-introduction/)
+- [Data Manipulation: A Dive into GraphQL Mutations in Rails 7 API](https://medium.com/simform-engineering/data-manipulation-a-dive-into-graphql-mutations-in-rails-7-api-bca1f7f00bab)
+- [Unlocking GraphQL's Power with Rails: What No One's Told You Yet!](https://www.youtube.com/watch?v=nnHYfNRGFKQ)

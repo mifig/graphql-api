@@ -2,7 +2,8 @@
 
 module Types
   class MutationType < Types::BaseObject
-    field :destroy_blog, mutation: Mutations::DestroyBlog
-    field :create_blog, mutation: Mutations::CreateBlog
+    field :blog_delete, mutation: Mutations::BlogDelete
+    field :blog_update, mutation: Mutations::BlogUpdate
+    field :blog_create, mutation: Mutations::BlogCreate
   end
 end

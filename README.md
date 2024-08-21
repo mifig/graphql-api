@@ -499,10 +499,38 @@ with variables:
 ```
 
 ## 7. Authentication with JWT in a Rails API + GraphQL context
+In order to have the authentication functionality up and running, the first thing we need to do is to:
+- Comment out the `gem "bcrypt", "~> 3.1.7"` in our gemfile and run `bundle install` in the command line.
 
+We now need to add the `has_secure_password` macro (available within Rails) in our `User` model, which will allow us to encrypt the authentication info of our users:
+```ruby
+class User < ApplicationRecord
+  has_secure_password
+  
+  has_many :blogs, dependent: :destroy
+  has_many :reviews, dependent: :destroy
+  
+  before_save { self.email = email.downcase }
+
+  def full_name
+    "#{first_name} #{last_name}"
+  end
+end
+```
+
+We also need to add the `password_digest` column (String) to the `User` model so that we can store the digested password in our DB in the users table:
+```sh
+rails g migration AddPasswordDigestToUsers password_digest
+```
+and run the migration with `rails db:migrate`.
+
+With the `has_secure_password` method we now have access to the `password` and `password_confirmation` instance methods that will allow us to implement the **log in** and **sign up** functionalities.
+
+We just need now to add the `gem 'jwt'` to our gemfile so that we can authenticate our users using JSON Web Tokens. Then run `bundle install` in the command line to install the gem.
 
 ## References
 - [GraphQL Gem](https://graphql-ruby.org/)
 - [How To GraphQL-Ruby Tutorial](https://www.howtographql.com/graphql-ruby/0-introduction/)
 - [Data Manipulation: A Dive into GraphQL Mutations in Rails 7 API](https://medium.com/simform-engineering/data-manipulation-a-dive-into-graphql-mutations-in-rails-7-api-bca1f7f00bab)
 - [Unlocking GraphQL's Power with Rails: What No One's Told You Yet!](https://www.youtube.com/watch?v=nnHYfNRGFKQ)
+- [Rails magic: has_secure_password](https://medium.com/geekculture/rails-magic-has-secure-password-a9bf0167642d)

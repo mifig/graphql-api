@@ -6,7 +6,7 @@ module Authentication
     decoded_token = validate_token(token)
 
     begin
-      User.find(decoded_token&[0]&['user_id'])
+      User.find(decoded_token[0]&.dig('user_id'))
     rescue ActiveRecord::RecordNotFound
       nil
     end
@@ -20,6 +20,6 @@ module Authentication
     decode(token)
   rescue JWT::DecodeError
     # Handle token decoding errors
-    nil
+    []
   end
 end

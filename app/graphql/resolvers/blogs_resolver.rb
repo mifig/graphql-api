@@ -7,7 +7,7 @@ module Resolvers
     type [Types::Models::BlogType], null: false
 
     def resolve
-      ::Blog.all
+      current_user.blogs
     end
   end
 end

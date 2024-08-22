@@ -11,7 +11,7 @@ module Mutations
 
       def resolve(data:)
         user = ::User.new(**data)
-        raise GraphQL::ExecutionError.new "Error creating user", extensions: user.errors.to_hash unless user.save
+        raise execution_error(message: "Error creating user", extensions: user.errors.to_hash) unless user.save
 
         { user: user }
       end

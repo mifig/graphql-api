@@ -13,6 +13,7 @@ It will cover the following sections:
 6. GraphQL relations
 7. GraphQL mutations
 8. Authentication with JWT in a Rails API + GraphQL context
+9. Pundit Integration with GraphQL
 
 > 🚨 This tutorial assumes a basic knowledge of graphQL operations. Refer to [this tutorial](https://www.youtube.com/playlist?list=PL4cUxeGkcC9gUxtblNUahcsg0WLxmrK_y) to gain an understanding of graphQL before jumping to this project. It should take approximately 2 hours.
 
@@ -488,7 +489,7 @@ mutation DestroyBlog($id: ID!) {
 with the id variable:
 ```json
 {
-    "id": 23
+  "id": 23
 }
 ```
 
@@ -549,10 +550,10 @@ mutation UpdateBlog($id: ID!, $data: UpdateBlogInput!) {
 with variables:
 ```json
 {
-    "data": {
-        "title": "Newer blog 😄"
-    },
-    "id": 26
+  "data": {
+    "title": "Newer blog 😄"
+  },
+  "id": 26
 }
 ```
 
@@ -771,7 +772,7 @@ module Authentication
     decoded_token = validate_token(token)
 
     begin
-      User.find(decoded_token&[0]&['user_id'])
+      User.find(decoded_token[0]&.dig('user_id'))
     rescue ActiveRecord::RecordNotFound
       nil
     end
@@ -867,19 +868,48 @@ end
 
 > 🔔 **Note**: To now do the queries / mutations protected, we are required to pass in the Authorization headers of our request to the graphql endpoint the JWT token we received when signing up / logging in as a Bearer Token.
 
-#### DELETE (Logout)
+### 8.4 EXTRA
+#### 8.4.1. Customize GraphQL Error responses
+To have more control over the error messages that you will eventually throw to the client, create in the `app/graphql/concerns` folder a module `ExecutionErrorResponder` that uses GraphQL::ExecutionError class from `graphql` gem to raising error messages. This class will add the *“errors”* key to the response. Include the `ExecutionErrorResponder` concern in the `BaseMutation` and `BaseResolver` objects to use the execution_error methods.
+```ruby
+module ExecutionErrorResponder
+  extend ActiveSupport::Concern
 
-### 9. EXTRA - Registrations Delete and Update
-#### DELETE
+  private
 
+  def execution_error(message: nil, extensions: nil, status: :unprocessable_entity, code: 422)
+    GraphQL::ExecutionError.new(message, extensions: extensions, options: { status: status, code: code})
+  end
+end
+```
 
-#### UPDATE
+We can now raise this concern if an error occurs:
+```ruby
+def resolve(data:)
+  user = ::User.new(**data)
+  raise execution_error(message: "Error creating user", extensions: user.errors.to_hash) unless user.save
+
+  { user: user }
+end
+```
+
+> 🔔 **Note**: Change all the other `raise GraphQL::ExecutionError.new ....` for this new error raise with mutations and resolvers alike.
+
+#### 8.4.2. DELETE Session (Logout)
+The delete of a session is performed by the client (for example, the React application), deleting the stored JWT from the `localStorage`, for example, if you stored the JWT in it.
+
+#### 8.4.3. DELETE Registration
+
+#### 8.4.4. UPDATE Registration
+
+## 9. Pundit Integration with GraphQL
 
 
 ## References
-- [GraphQL Gem](https://graphql-ruby.org/)
-- [How To GraphQL-Ruby Tutorial](https://www.howtographql.com/graphql-ruby/0-introduction/)
-- [Data Manipulation: A Dive into GraphQL Mutations in Rails 7 API](https://medium.com/simform-engineering/data-manipulation-a-dive-into-graphql-mutations-in-rails-7-api-bca1f7f00bab)
-- [Unlocking GraphQL's Power with Rails: What No One's Told You Yet!](https://www.youtube.com/watch?v=nnHYfNRGFKQ)
-- [Rails magic: has_secure_password](https://medium.com/geekculture/rails-magic-has-secure-password-a9bf0167642d)
-- [User Authentication by JWT for Rails GraphQL API](https://blog.stackademic.com/user-authentication-by-jwt-for-rails-graphql-api-fa1aa4ba1039)
+- [GraphQL Gem](https://graphql-ruby.org/) - GraphQL gem documentation
+- [How To GraphQL-Ruby Tutorial](https://www.howtographql.com/graphql-ruby/0-introduction/) - Extensive tutorial on GraphQL gem
+- [Data Manipulation: A Dive into GraphQL Mutations in Rails 7 API](https://medium.com/simform-engineering/data-manipulation-a-dive-into-graphql-mutations-in-rails-7-api-bca1f7f00bab) - Mutations deepdive in graphql gem
+- [Unlocking GraphQL's Power with Rails: What No One's Told You Yet!](https://www.youtube.com/watch?v=nnHYfNRGFKQ) - Tutorial on implementing GraphQL into Rails, with JWT authentication.
+- [Rails magic: has_secure_password](https://medium.com/geekculture/rails-magic-has-secure-password-a9bf0167642d) - has_secure_password information
+- [User Authentication by JWT for Rails GraphQL API](https://blog.stackademic.com/user-authentication-by-jwt-for-rails-graphql-api-fa1aa4ba1039) - Registration and Login with JWT within GraphQL Rails API
+- [Server-side authentication using GraphQL + JWT + Ruby on Rails](https://medium.flatstack.com/server-side-authentication-using-graphql-jwt-ruby-on-rails-8820e0471ed4) - Authentication with JWT within GraphQL Rails API

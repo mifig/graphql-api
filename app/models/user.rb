@@ -3,6 +3,8 @@ class User < ApplicationRecord
   
   has_many :blogs, dependent: :destroy
   has_many :reviews, dependent: :destroy
+
+  validates :email, presence: true, uniqueness: true
   
   before_save { self.email = email.downcase }
 

@@ -14,14 +14,14 @@ module Mutations
         user = ::User.find_by(email: data.email)
 
         if user&.authenticate(data.password)
-          token = JWT.encode({user_id: user.id}, ENV["JWT_SECRET"], 'HS256')
+          token = JWT.encode({user_id: user.id, exp: Time.now.to_i + 86_400}, ENV["JWT_SECRET"], 'HS256')
 
           { 
             user: user,
             token: token
           }
         else
-          raise GraphQL::ExecutionError.new "Invalid credentials."
+          raise execution_error(message: "Invalid credentials.")
         end
       end
     end

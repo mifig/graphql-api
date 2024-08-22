@@ -12,7 +12,8 @@ module Mutations
 
     def resolve(id:, data:)
       blog = ::Blog.find(id)
-      raise GraphQL::ExecutionError.new "Error updating blog", extensions: blog.errors.to_hash unless blog.update(**data)
+      
+      raise execution_error(message: "Error updating blog.", extensions: blog.errors.to_hash) unless blog.update(**data)
 
       { blog: blog }
     end

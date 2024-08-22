@@ -10,7 +10,8 @@ module Mutations
 
     def resolve(id:)
       blog = ::Blog.find(id)
-      raise GraphQL::ExecutionError.new "Error deleting blog", extensions: blog.errors.to_hash unless blog.destroy!
+
+      raise execution_error(message: "Error deleting blog.", extensions: blog.errors.to_hash) unless blog.destroy!
 
       { blog: blog }
     end

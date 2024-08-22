@@ -10,8 +10,9 @@ module Mutations
 
     def resolve(data:)
       blog = ::Blog.new(**data)
-      raise GraphQL::ExecutionError.new "Error creating blog", extensions: blog.errors.to_hash unless blog.save
 
+      raise execution_error(message: "Error creating blog.", extensions: blog.errors.to_hash) unless blog.save
+      
       { blog: blog }
     end
   end

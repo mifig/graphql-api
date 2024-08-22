@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Resolvers
-  class BlogsResolver < BaseResolver
+  class BlogsResolver < AuthenticatedResolver
     description "Get all blogs."
 
     type [Types::Models::BlogType], null: false

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Resolvers
-  class UserResolver < BaseResolver
+  class UserResolver < AuthenticatedResolver
     description "Get a user by ID."
     
     argument :user_id, ID, required: true, loads: Types::Models::UserType

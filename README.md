@@ -364,7 +364,7 @@ field :blogs, [BlogType]
 Now we can either get the user associated to a blog, or the blogs associated to a user.
 
 ## 7. GraphQL mutations
-### 7.1 CREATE
+### 7.1. CREATE
 To generate a create mutation, for example to create a new blog, we can use graphql generator in the command line:
 
 ```sh
@@ -446,7 +446,7 @@ with the variables:
 }
 ```
 
-### 7.2 DESTROY
+### 7.2. DESTROY
 We will follow the same process, but now for destroying a blog:
 ```sh
 rails g graphql:mutation_delete blog
@@ -492,7 +492,7 @@ with the id variable:
 }
 ```
 
-### 7.3 UPDATE
+### 7.3. UPDATE
 Create mutation:
 ```sh
 rails g graphql:mutation_update blog
@@ -557,6 +557,7 @@ with variables:
 ```
 
 ## 8. Authentication with JWT in a Rails API + GraphQL context
+### 8.1. Setup
 In order to have the authentication functionality up and running, the first thing we need to do is to:
 - Comment out the `gem "bcrypt", "~> 3.1.7"` in our gemfile and run `bundle install` in the command line.
 
@@ -585,6 +586,295 @@ and run the migration with `rails db:migrate`.
 With the `has_secure_password` method we now have access to the `password` and `password_confirmation` instance methods that will allow us to implement the **log in** and **sign up** functionalities.
 
 We just need now to add the `gem 'jwt'` to our gemfile so that we can authenticate our users using JSON Web Tokens. Then run `bundle install` in the command line to install the gem.
+
+### 8.2. Registrations
+Let's start by creating an `authentication` folder within our mutations to handle the registrations of users, which will include:
+- Creating a registration (sign-up)
+- Deleting a registration (cancel account)
+- Updating a registration (edits of user account: email, password, etc...)
+
+For now let's focus on the sign-up (we will cover the delete and update at later sections).
+
+#### CREATE
+Generate a mutation create for the user:
+```sh
+rails g graphql:mutation_create user
+```
+
+With the mutation created,:
+- Move the mutation to the authentication folder;
+- Rename the mutation to `registration_create.rb` (and add the module `Authentication` around the class, changing as well the class name to `RegistrationCreate`).
+- In the `mutation_type.rb` file, change the auto-generated field to:
+  ```ruby
+  field :registration_create, mutation: Mutations::Authentication::RegistrationCreate
+  ```
+
+Let's also create a folder within our `types/inputs` for the authentication, called `authentication`.
+Create the inputs for the registration with:
+```sh
+rails g graphql:input inputs/authentication/create_registration
+```
+
+The input type should look like this:
+```ruby
+module Types
+  module Inputs
+    module Authentication
+      class CreateRegistrationInput < Types::BaseInputObject
+        description "Attributes for creating a registration (user)."
+
+        argument :first_name, String, required: true
+        argument :last_name, String, required: true
+        argument :email, String, required: true
+        argument :password, String, required: true
+      end
+    end
+  end
+end
+```
+
+Let's now refer to this input type in our mutation:
+```ruby
+module Mutations
+  module Authentication
+    class RegistrationCreate < BaseMutation
+      description "Registers a new user"
+
+      field :user, Types::Models::UserType, null: false
+
+      argument :data, Types::Inputs::Authentication::CreateRegistrationInput, required: true
+
+      def resolve(data:)
+        user = ::User.new(**data)
+        raise GraphQL::ExecutionError.new "Error creating user", extensions: user.errors.to_hash unless user.save
+
+        { user: user }
+      end
+    end
+  end
+end
+```
+
+We are now able to perform the create mutation to create our user registration:
+```graphql
+mutation RegistrationCreate($data: CreateRegistrationInput!) {
+  registrationCreate(input: { data: $data }) {
+    user {
+      id
+      fullName
+      email
+    }
+  }
+}
+```
+with variable `data`:
+```json
+{
+	"data": {
+		"firstName": "Test",
+		"lastName": "Registration",
+		"email": "test@test.com",
+		"password": "111111"
+	}
+}
+```
+
+The password will be hashed and salted, and the user will have a `password_digest` value representing its registration information.
+
+### 8.3. Sessions
+With the user created, let's now do the login and logout logic with JWT.
+
+#### CREATE (Login)
+Let's create a mutation for creating a session with the `mutations/authentication` folder:
+```ruby
+module Mutations
+  module Authentication
+    class SessionCreate < BaseMutation
+      description "Creates a session for a user and returns a JWToken representing that session"
+
+      field :user, Types::Models::UserType, null: false
+      field :token, String, null: false
+
+      argument :data, Types::Inputs::Authentication::CreateSessionInput, required: true
+
+      def resolve(data:)
+        user = ::User.find_by(email: data.email)
+
+        if user&.authenticate(data.password)
+          token = JWT.encode({user_id: user.id}, ENV["JWT_SECRET"], 'HS256')
+          
+          { 
+            user: user,
+            token: token
+          }
+        else
+          raise GraphQL::ExecutionError.new "Invalid credentials."
+        end
+      end
+    end
+  end
+end
+```
+
+In order for this mutation to be feasible, we need to:
+- Add the `JWT_SECRET` to the `.env` file (choose the secret you want, eg: 2ydjs7932DdsmH!dsljh$);
+- Create the input types (email and password required):
+  ```ruby
+  module Types
+    module Inputs
+      module Authentication
+        class CreateSessionInput < Types::BaseInputObject
+          description "Attributes for creating a session."
+
+          argument :email, String, required: true
+          argument :password, String, required: true
+        end
+      end
+    end
+  end
+  ```
+
+We also need to add the field refering to this mutation to the `mutation_type.rb` file:
+```ruby
+field :session_create, mutation: Mutations::Authentication::SessionCreate
+```
+
+Now we can login, and we will receive a token representing the active session of the user:
+```graphql
+mutation Login($data: CreateSessionInput!) {
+	sessionCreate(input: { data: $data }) {
+		user {
+			fullName
+			email
+		}
+		token
+	}
+}
+```
+with `data` variable:
+```json
+{
+	"data": {
+		"email": "test@test.com",
+		"password": "111111"
+	}
+}
+```
+
+What we want to do now, is to require authentication before the user can perform any of the actions besides creating a registration or a session. For that, let's create an object to handle the authentication process in the `lib` folder, called `authentication.rb`:
+```ruby
+module Authentication  
+  def self.current_user(request)
+    token = request.headers['Authorization'].to_s.split(' ').last
+    return unless token
+
+    decoded_token = validate_token(token)
+
+    begin
+      User.find(decoded_token&[0]&['user_id'])
+    rescue ActiveRecord::RecordNotFound
+      nil
+    end
+  end
+
+  def self.decode(token)
+    JWT.decode(token, ENV["JWT_SECRET"], true, algorithm: 'HS256')
+  end  
+
+  def self.validate_token(token)
+    decode(token)
+  rescue JWT::DecodeError
+    # Handle token decoding errors
+    nil
+  end
+end
+```
+
+Now, let's add the context to our `graphql_controller.rb` execute method. It should look like this:
+```ruby
+class GraphqlController < ApplicationController
+  # If accessing from outside this domain, nullify the session
+  # This allows for outside API access while preventing CSRF attacks,
+  # but you'll have to authenticate your user separately
+  # protect_from_forgery with: :null_session
+
+  def execute
+    variables = prepare_variables(params[:variables])
+    query = params[:query]
+    operation_name = params[:operationName]
+    context = { current_user: Authentication.current_user(request) }
+    result = GraphqlApiSchema.execute(query, variables: variables, context: context, operation_name: operation_name)
+    render json: result
+  rescue StandardError => e
+    raise e unless Rails.env.development?
+    handle_error_in_development(e)
+  end
+
+  # More code...
+end
+```
+
+Now we need to protect our queries and mutations. For that, let's create an `authenticated_resolver.rb` and `authenticated_mutation.rb` file, that the protected queries/mutations will inherit from:
+- resolver:
+  ```ruby
+  module Resolvers
+    class AuthenticatedResolver < BaseResolver
+      def authorized?(*_args)
+        raise GraphQL::ExecutionError, 'Authentication required.' unless current_user
+
+        true
+      end
+
+      def current_user
+        context[:current_user]
+      end
+    end
+  end
+  ```
+- mutation:
+  ```ruby
+  module Mutations
+    class AuthenticatedMutation < BaseMutation
+      def ready?(**_args)
+        raise GraphQL::ExecutionError, 'Authentication required.' unless current_user
+
+        true
+      end
+
+      def current_user
+        context[:current_user]
+      end
+    end
+  end
+  ```
+
+Now just change the inheritance of the protected resolvers/mutations from `BaseResolver` and `BaseMutation` to `AuthenticatedResolver` and `AuthenticatedMutation`, as such:
+```ruby
+module Resolvers
+  class UserResolver < AuthenticatedResolver
+    description "Get a user by ID."
+    
+    argument :user_id, ID, required: true, loads: Types::Models::UserType
+
+    type Types::Models::UserType, null: true
+    
+    def resolve(user:)
+      user
+    end
+  end
+end
+```
+
+> 🔔 **Note**: To now do the queries / mutations protected, we are required to pass in the Authorization headers of our request to the graphql endpoint the JWT token we received when signing up / logging in as a Bearer Token.
+
+#### DELETE (Logout)
+
+### 9. EXTRA - Registrations Delete and Update
+#### DELETE
+
+
+#### UPDATE
+
 
 ## References
 - [GraphQL Gem](https://graphql-ruby.org/)

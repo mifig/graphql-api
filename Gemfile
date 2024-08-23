@@ -51,3 +51,4 @@ end
 gem 'faker'
 gem 'graphql'
 gem 'jwt'
+gem 'pundit'

@@ -21,6 +21,7 @@ module Types
     # Add root-level fields here.
     # They will be entry points for queries on your schema.
     field :blogs, resolver: Resolvers::BlogsResolver
+    field :blog, resolver: Resolvers::BlogResolver
     field :user, resolver: Resolvers::UserResolver
     field :review, resolver: Resolvers::ReviewResolver
   end

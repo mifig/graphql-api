@@ -7,7 +7,7 @@ module Resolvers
     type [Types::Models::BlogType], null: false
 
     def resolve
-      current_user.blogs
+      Pundit.policy_scope(current_user, ::Blog)
     end
   end
 end

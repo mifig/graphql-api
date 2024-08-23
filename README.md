@@ -903,7 +903,142 @@ The delete of a session is performed by the client (for example, the React appli
 #### 8.4.4. UPDATE Registration
 
 ## 9. Pundit Integration with GraphQL
+In order to include pundit authorizations within our Rails API + GraphQL app, we just need to ad the `gem 'pundit'` in our gemfile and install it with `bundle install`.
 
+After, we install pundit, that will create for us a `policies` folder and the `application_policy.rb` file that will be the inherited class from our policies:
+```sh
+rails g pundit:install
+```
+
+With that in place, we just need to create the necessary policies, for example, for our `Blog` model:
+```sh
+rails g pundit:policy blog
+```
+
+For the `Blogs` query, we might want the scope to be only the current user blogs. For that, we can define the scope to be:
+```ruby
+class BlogPolicy < ApplicationPolicy
+  # NOTE: Up to Pundit v2.3.1, the inheritance was declared as
+  # `Scope < Scope` rather than `Scope < ApplicationPolicy::Scope`.
+  # In most cases the behavior will be identical, but if updating existing
+  # code, beware of possible changes to the ancestors:
+  # https://gist.github.com/Burgestrand/4b4bc22f31c8a95c425fc0e30d7ef1f5
+
+  class Scope < ApplicationPolicy::Scope
+    # NOTE: Be explicit about which records you allow access to!
+    def resolve
+      scope.where(user: user)
+    end
+  end
+end
+```
+
+And in our `blogs_resolver.rb`, we add the policy_scope:
+```ruby
+# frozen_string_literal: true
+
+module Resolvers
+  class BlogsResolver < AuthenticatedResolver
+    description "Get all blogs."
+
+    type [Types::Models::BlogType], null: false
+
+    def resolve
+      Pundit.policy_scope(current_user, ::Blog)
+    end
+  end
+end
+```
+
+The first argument being the current user (so that the policy understands the user that it is authorizing) and the second argument the model to be authorized.
+
+If we want to authorize a specific action for a model, for example, the creation fo a blog, we can:
+- Add the method `create?` in our blog policy, which for now will just be true, but we can imagine having a `user.admin?` condition:
+  ```ruby
+  def create?
+    true # or user.admin?, etc...
+  end
+  ```
+- Now, we can add the `authorized?` method to our `blog_create.rb` mutation:
+  ```ruby
+  module Mutations
+    class BlogCreate < AuthenticatedMutation
+      description "Creates a new blog"
+
+      field :blog, Types::Models::BlogType, null: false
+
+      argument :data, Types::Inputs::CreateBlogInput, required: true
+
+      def resolve(data:)
+        blog = ::Blog.new(**data)
+
+        raise execution_error(message: "Error creating blog.", extensions: blog.errors.to_hash) unless blog.save
+        
+        { blog: blog }
+      end
+
+      def authorized?(**args)
+        policy = BlogPolicy.new(current_user, nil)
+        raise execution_error(message: 'Not authorized to create a blog.', code: 403, status: :unauthorized) unless super && policy.create?
+
+        true
+      end
+    end
+  end
+  ```
+  The `super` keyword will ensure that the authorization from being logged in (present in our `authenticated_mutation.rb` file) is also verified along with pundit's authorization.
+
+We can also protect our `blog_resolver.rb`, so that the user can only see blogs that he created. For that, let's add the `show?` method in our `blog_policy.rb`:
+```ruby
+class BlogPolicy < ApplicationPolicy
+  # NOTE: Up to Pundit v2.3.1, the inheritance was declared as
+  # `Scope < Scope` rather than `Scope < ApplicationPolicy::Scope`.
+  # In most cases the behavior will be identical, but if updating existing
+  # code, beware of possible changes to the ancestors:
+  # https://gist.github.com/Burgestrand/4b4bc22f31c8a95c425fc0e30d7ef1f5
+
+  class Scope < ApplicationPolicy::Scope
+    # NOTE: Be explicit about which records you allow access to!
+    def resolve
+      scope.where(user: user)
+    end
+  end
+
+  def create?
+    true
+  end
+
+  def show?
+    record.user == user
+  end
+end
+```
+
+Now, in our `blog_resolver.rb` let's also add our `authorized?`method, but now sending:
+```ruby
+module Resolvers
+  class BlogResolver < AuthenticatedResolver
+    description "Get a blog by ID."
+    
+    argument :blog_id, ID, required: true, loads: Types::Models::BlogType
+
+    type Types::Models::BlogType, null: true
+    
+    def resolve(blog:)
+      blog
+    end
+
+    def authorized?(**args)
+      policy = BlogPolicy.new(current_user, args[:blog])
+      raise execution_error(message: 'Not authorized to see this blog.', code: 403, status: :unauthorized) unless super && policy.show?
+      
+      true
+    end
+  end
+end
+```
+
+Now we can only see a blog if it is ours. Authentication from JWT will also be in place.
 
 ## References
 - [GraphQL Gem](https://graphql-ruby.org/) - GraphQL gem documentation

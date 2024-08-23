@@ -15,5 +15,12 @@ module Mutations
       
       { blog: blog }
     end
+
+    def authorized?(**args)
+      policy = BlogPolicy.new(current_user, nil)
+      raise execution_error(message: 'Not authorized to create a blog.', code: 403, status: :unauthorized) unless super && policy.create?
+
+      true
+    end
   end
 end

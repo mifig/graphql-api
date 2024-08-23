@@ -1,5 +1,5 @@
 # 💎 RAILS API + 🕸️ GRAPHQL
-<span style="background: rgba(100, 120, 100); border-radius: 10px; padding: 8px 12px;">***v0.1** - 20.08.2024*</span> 
+<span style="background: rgba(100, 120, 100); border-radius: 10px; padding: 8px 12px;">***v0.1** - 23.08.2024*</span> 
 
 This project aims at providing detailed guidelines to create a Rails API with GraphQL.
 
@@ -22,6 +22,8 @@ This project uses the following software versions:
 - `Ruby`: 3.1.2p20
 - `Rails`: 7.1.3.4
 - `GraphQL`: 2.3.14
+
+A huge thanks to [Ricardo Otero](https://github.com/rikas) for the guidance and availability.
 
 ## 1. Rails API creation
 

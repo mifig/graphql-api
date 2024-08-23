@@ -7,7 +7,7 @@ module Types
 
       argument :title, String, required: false
       argument :description, String, required: false
-      argument :user_id, ID, required: false
+      argument :user_id, ID, required: false, loads: Types::Models::UserType
     end
   end
 end

@@ -6,7 +6,7 @@ class User < ApplicationRecord
 
   validates :email, presence: true, uniqueness: true
   
-  before_save { self.email = email.downcase }
+  normalizes :email, with: -> email { email.downcase }
 
   def full_name
     "#{first_name} #{last_name}"

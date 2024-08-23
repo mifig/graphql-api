@@ -1,6 +1,6 @@
 module Mutations
   class AuthenticatedMutation < BaseMutation
-    def ready?(**_args)
+    def authorized?(*_args)
       raise execution_error(message: 'Authentication required.', code: 401, status: :unauthorized) unless current_user
 
       true

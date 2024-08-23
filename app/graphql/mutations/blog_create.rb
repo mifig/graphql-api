@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module Mutations
-  class BlogCreate < BaseMutation
+  class BlogCreate < AuthenticatedMutation
     description "Creates a new blog"
 
     field :blog, Types::Models::BlogType, null: false

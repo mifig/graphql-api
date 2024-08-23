@@ -815,7 +815,7 @@ class GraphqlController < ApplicationController
 end
 ```
 
-Now we need to protect our queries and mutations. For that, let's create an `authenticated_resolver.rb` and `authenticated_mutation.rb` file, that the protected queries/mutations will inherit from:
+Now we need to protect our queries and mutations. We can do that using the `authorized?` method of the graphql gem, that will run the desired query / mutation only if the method complies with the stated condition. For that, let's create an `authenticated_resolver.rb` and `authenticated_mutation.rb` file, that the protected queries/mutations will inherit from:
 - resolver:
   ```ruby
   module Resolvers
@@ -836,7 +836,7 @@ Now we need to protect our queries and mutations. For that, let's create an `aut
   ```ruby
   module Mutations
     class AuthenticatedMutation < BaseMutation
-      def ready?(**_args)
+      def authorized?(*_args)
         raise GraphQL::ExecutionError, 'Authentication required.' unless current_user
 
         true

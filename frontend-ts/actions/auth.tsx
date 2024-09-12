@@ -19,7 +19,7 @@ export async function login(state: any, formData: FormData) {
     
     cookies().set('jwtToken', data.sessionCreate.token)
   } catch(error: any) {
-    return { error: error.message }
+    return { ...error }
   }
 
   redirect("/blogs")

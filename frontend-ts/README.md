@@ -10,11 +10,41 @@ npx create-next-app@latest
 npm install @apollo/client @apollo/experimental-nextjs-app-support graphql
 ```
 
-#### Configure Apollo Client for Server Components:
+First of all, we will need to create a Next.js link to handle the authentication (placing the jwtToken received by the backend and stored in the cookies as the Bearer token of our requests, except for the login and signup routes for now):
+```js
+// lib/apollo-auth-link.js
+
+import { ApolloLink } from '@apollo/client';
+import { cookies } from 'next/headers';
+
+const publicPaths = ['/login', '/signup'];
+
+export const createServerAuthLink = (getPathname: () => string) => {
+  return new ApolloLink((operation, forward) => {
+    const pathname = getPathname();
+
+    if (!publicPaths.includes(pathname)) {
+      const cookieStore = cookies();
+      const token = cookieStore.get('jwtToken')?.value;
+
+      operation.setContext(({ headers = {} }) => ({
+        headers: {
+          ...headers,
+          authorization: token ? `Bearer ${token}` : '',
+        },
+      }));
+    }
+
+    return forward(operation);
+  });
+};
+```
+
+#### Now, we can configure Apollo Client for Server Components (already with the authlink):
 ```js
 // apollo-client.ts
 
-import { ApolloClient, HttpLink, InMemoryCache } from "@apollo/client";
+import { ApolloClient, HttpLink, InMemoryCache, from } from "@apollo/client";
 import { registerApolloClient } from "@apollo/experimental-nextjs-app-support";
 import { createServerAuthLink } from '@/lib/apollo-auth-link';
 import { headers } from 'next/headers';
@@ -29,7 +59,7 @@ export const { getClient, query } = registerApolloClient(() => {
 
   return new ApolloClient({
     cache: new InMemoryCache(),
-    link: authLink.concat(httpLink),
+    link: from([authLink, httpLink]),
   });
 });
 
@@ -42,13 +72,47 @@ const authLink = createServerAuthLink(() => headers().get('x-invoke-path') || ''
 
 export const apolloClient = new ApolloClient({
   cache: new InMemoryCache(),
-  link: authLink.concat(httpLink),
+  link: from([authLink, httpLink]),
 });
 ```
 
-#### Configure Apollo Client for Client Components:
+Let's now wrap it in another function that will allow us to do the query call and catch any errors that might occur (unauthorized, not found, etc...). This is the method we'll use to make server queries:
+```js
+// lib/server-query.ts
+
+import { DocumentNode } from 'graphql';
+import { getClient } from './apollo-client';
+import { redirect } from 'next/navigation';
+
+export default async function serverQuery<T>(query: DocumentNode, variables?: Record<string, any>) {
+  try {
+    const { data } = await getClient().query<T>({
+      query, 
+      variables
+    });
+    return data;
+  } catch (error: any) {
+    error.graphQLErrors.forEach((graphQLError: any) => {
+      console.log(graphQLError)
+      if (graphQLError.code === 401) {
+        redirect(`/login?error=${graphQLError.message}&code=${graphQLError.code}`);
+      } 
+      // else if(graphQLError.code === 401) {
+      //   redirect(`/login?error=${graphQLError.message}&code=${graphQLError.code}`);
+      // }
+    })
+
+    throw error;
+  }
+}
+```
+
+In the code above we redirecting to the login with the error code and message as params, so that we can access it and show in the flash notices to the user (more in chapter 3).
+
+#### And we can configure Apollo Client for Client Components as well:
 ```js
 // /lib/apollo_wrapper.tsx
+
 "use client";
 
 import {
@@ -89,7 +153,7 @@ export function ApolloWrapper({ children }: React.PropsWithChildren) {
 }
 ```
 
-#### Add wrapper to layout:
+And now just add the wrapper to the layout, so that every client component gets the same ApolloClient (no repeated queries):
 ```js
 // /app/layout.tsx
 
@@ -120,7 +184,9 @@ export default function RootLayout({
 }
 ```
 
-### 1.3. Install codegen to read types from graphql and geneate TypeScript types to frontend:
+### 1.3. Install codegen
+This will allow us to read the types from graphql (bakend) and generate TypeScript types to the frontend
+
 #### In Rails Api generate rake task to dump graphql schema into a file to be copied to frontend:
 ```ruby
 # /lib/tasks/graphql.rake
@@ -130,6 +196,7 @@ require 'graphql/rake_task'
 
 GraphQL::RakeTask.new(schema_name: 'GraphqlApiSchema')
 ```
+
 Run task to generate `schema.graphql` file:
 ```sh
 rails graphql:schema:dump
@@ -141,8 +208,7 @@ npm add graphql
 npm add typescript @graphql-codegen/cli
 ```
 
-#### Copy backend generated `schema.graphql` to frontend `/graphql`
-#### Create `/graphql/codegen.yml` with following configuration:
+Copy backend generated `schema.graphql` to frontend `/graphql` and create `/graphql/codegen.yml` with following configuration:
 ```yml
 ---
 overwrite: true
@@ -159,6 +225,7 @@ generates:
     config:
       documentVariableSuffix: 'Doc'
 ```
+
 Create script to run codegen configuration and generate types file:
 ```json
 // package.json
@@ -169,84 +236,27 @@ Create script to run codegen configuration and generate types file:
   },
 ```
 
-#### Now let's create some queries and mutations (placed them under `graphql/queries`, `graphql/mutations` and `graphql/fragments`)
-```graphql
-query Blogs {
-  blogs {
-    id
-    title
-    description
-    user {
-      email
-      fullName
-    }
-  }
-}
-```
-
-#### Now generate the types by running the pnpm command:
-```sh
-npm run codegen
-```
-
-# 2. Get all blogs
-Now let's create a route for the `/blogs` endpoint by generating a folder `blogs` with a `page.tsx` file that will be rendering the page. It will be a server component:
+## 2. Authentication
+### 2.1. Generate graphql Mutation with codegen:
+Follow steps of codegen to regenerate the schema of graphql, add the authentication mutation to frontend:
 ```js
-import { Blog, BlogsDoc } from "@/graphql/generated";
-import { query } from "@/lib/apollo-client";
-import Link from "next/link";
-
-export default async function BlogsPage() {
-  const { data } = await query({query: BlogsDoc});
-
-  return (
-    <div className="mx-5">
-      <h1 className="text-4xl mt-5 mb-5 text-center">MY BLOGS</h1>
-
-      <ul>
-        {data.blogs.map((blog: Blog, idx: number) => {
-          return <li key={idx}><Link href={`/blogs/${blog.id}`} className="hover:text-orange-800">{blog.title}</Link></li>
-        })}
-      </ul>
-    </div>
-  )
+mutation Authenticate($token: String!) {
+	sessionValidate(input: { token: $token }) {
+		token
+		user {
+			email
+			fullName
+			id
+		}
+	}
 }
 ```
 
-# 3. Authentication:
-## 3.1. Create LoginForm component:
-```js
-"use client"
-
-import React from 'react';
-import { login } from '@/actions/auth';
-import { useFormState } from "react-dom";
-
-function LoginForm() {
-  const [state, formAction] = useFormState(login)
-  return (
-    <form action={formAction}>
-      <div>
-        <label htmlFor="email">Email</label>
-        <input id="email" name="email" type="email" placeholder="Email" />
-      </div>
-      <div>
-        <label htmlFor="password">Password</label>
-        <input id="password" name="password" type="password" />
-      </div>
-      <button type="submit">Login</button>
-      <p>{state?.error}</p>
-    </form>
-  )
-}
-
-export default LoginForm;
-```
-
-## 3.2. Generate the signup function
+### 2.2. Generate the signup function
 It will be a server action sending the request and storing the jwtToken in the cookies:
 ```js
 // /actions/auth.ts
+
 "use server"
 
 import { LoginDoc } from "@/graphql/generated";
@@ -268,77 +278,234 @@ export async function login(state: any, formData: FormData) {
     
     cookies().set('jwtToken', data.sessionCreate.token)
   } catch(error: any) {
-    return { error: error.message }
+    return { ...error }
   }
 
   redirect("/blogs")
 }
 ```
 
-## 3.3. Validate and refresh jwtToken (backend) [NOT NEEDED!!!]
-Let's now create in our backend an endpoint to validate the jwtToken and refresh it for a newer one if it is valid.
-1. Add e session_validate.rb in our mutations folder, that will fetch user if token is valid and refresh to a new token:
-```ruby
-module Mutations
-  module Authentication
-    class SessionValidate < BaseMutation
-      description "Validates the JWToken and refreshes for a new one"
-
-      field :user, Types::Models::UserType, null: false
-      field :token, String, null: false
-
-      argument :token, String, required: true
-
-      def resolve(token:)
-        user = ::Authentication.current_user_from_token(token)
-        
-        if user
-          token = JWT.encode({user_id: user.id, exp: Time.now.to_i + 86_400}, ENV["JWT_SECRET"], 'HS256')
-
-          { 
-            user: user,
-            token: token
-          }
-        else
-          raise execution_error(message: "Invalid jwtToken.", code: 401, status: :unauthorized)
-        end
-      end
-    end
-  end
-end
-```
-
-2. Add the mutation to the `mutation_type.rb` file:
-```ruby
-field :session_validate, mutation: Mutations::Authentication::SessionValidate
-```
-
-## 3.4. Frontend:
-1. Follow steps of codegen to regenerate the schema of graphql, add the ahtentication mutation to frontend:
+### 2.3. Create Login Page:
 ```js
-mutation Authenticate($token: String!) {
-	sessionValidate(input: { token: $token }) {
-		token
-		user {
-			email
-			fullName
-			id
-		}
-	}
+// app/login/page.tsx
+
+'use client'
+
+import React from "react"
+import { login } from '@/actions/auth';
+import { useFormState } from "react-dom";
+
+export default function LoginPage({searchParams}: any) {
+  const [state, formAction] = useFormState(login, '')
+  const id = React.useId()
+
+  return (
+    <div className="flex w-100 flex-col h-dvh justify-center">
+      <h1 className="text-4xl mb-5 text-center font-bold">LOG IN</h1>
+      
+      {searchParams && <p>{searchParams.error}</p>}
+      
+      {state?.graphQLErrors && 
+        state.graphQLErrors.map((error: any) => {
+          return (<p key={id}>{error.code} - {error.message}</p>)
+        })
+      }
+      
+      <form action={formAction} className="w-full max-w-80 flex flex-col gap-4 self-center">
+        <div className="flex flex-col">
+          <label htmlFor="email">Email</label>
+          <input id="email" name="email" type="email" className="p-2"/>
+        </div>
+        <div className="flex flex-col mb-3">
+          <label htmlFor="password">Password</label>
+          <input id="password" name="password" type="password" className="p-2"/>
+        </div>
+        <button type="submit" className="rounded-none bg-blue-700 text-yellow-200 py-3 hover:bg-blue-900 hover:text-yellow-500">Login</button>
+      </form>
+
+    </div>
+  )
 }
 ```
 
-2. Add an auth error (when jwt token doesnt exist or the response is invalid token, we redirect to /login)
-```js
-// lib/auth_error.ts
-import { redirect } from 'next/navigation';
+We can now Login and we will be redirected to `/blogs`.
 
-export function handleAuthError(error: unknown) {
-  if (error instanceof Error) {
-    if (error.message === 'JWT_MISSING' || error.message.includes('Invalid token')) {
-      redirect('/login');
+## 3. Adding flash notices
+Create a flashNotice to handle the flash notice messages:
+```js
+// lib/flash-notice.ts
+
+import { cookies } from 'next/headers';
+
+export function getFlashNotice() {
+  const flashNotice = cookies().get('flash')?.value;
+  
+  if (flashNotice) {
+    cookies().delete('flash');
+  }
+  return flashNotice;
+}
+
+export function setFlashNotice(message: string) {
+  cookies().set('flash', message, { 
+    maxAge: 5, // Cookie will expire in 5 seconds
+    path: '/'
+  });
+}
+```
+
+Generate a new FlashNotice component:
+```sh
+npx new-component FlashNotice -d components
+```
+
+where the component is:
+```js
+// components/FlashNotice/FlashNotice.tsx
+
+'use client'
+
+import React from 'react';
+
+export default function FlashNotice({ initialMessage }: { initialMessage: string | undefined }) {
+  const [message, setMessage] = React.useState(initialMessage);
+
+  if (!message) return null;
+
+  return (
+    <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded absolute right-6 bottom-6" role="alert">
+      <span className="block sm:inline">🔔 {message}</span>
+    </div>
+  );
+}
+```
+
+Update layout of app to include FlashNotice:
+```js
+// app/layout.tsx
+
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { ApolloWrapper } from "@/lib/apollo-wrapper";
+import { getFlashNotice } from '@/lib/flash-notice';
+import FlashNotice from '@/components/FlashNotice';
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "Create Next App",
+  description: "Generated by create next app",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  const flashNotice = getFlashNotice();
+
+  return (
+    <html lang="en" className="min-h-dvh">
+      <body className={`${inter.className} bg-yellow-200 text-blue-700`}>
+        <ApolloWrapper>{children}</ApolloWrapper>
+        <FlashNotice initialMessage={flashNotice} />
+      </body>
+    </html>
+  );
+}
+```
+
+Now we can just update our Login page to display these alerts:
+```js
+'use client'
+
+import React from "react"
+import { login } from '@/actions/auth';
+import { useFormState } from "react-dom";
+import FlashNotice from "@/components/FlashNotice";
+
+export default function LoginPage({searchParams}: any) {
+  const [state, formAction] = useFormState(login, '')
+  const id = React.useId()
+
+  return (
+    <div className="flex w-100 flex-col h-dvh justify-center">
+      <h1 className="text-4xl mb-5 text-center font-bold">LOG IN</h1>
+      
+      {searchParams && <FlashNotice initialMessage={searchParams.error}></FlashNotice>}
+      
+      {state?.graphQLErrors && 
+        state.graphQLErrors.map((error: any) => {
+          return <FlashNotice initialMessage={error.message}></FlashNotice>
+        })
+      }
+      
+      <form action={formAction} className="w-full max-w-80 flex flex-col gap-4 self-center">
+        <div className="flex flex-col">
+          <label htmlFor="email">Email</label>
+          <input id="email" name="email" type="email" className="p-2"/>
+        </div>
+        <div className="flex flex-col mb-3">
+          <label htmlFor="password">Password</label>
+          <input id="password" name="password" type="password" className="p-2"/>
+        </div>
+        <button type="submit" className="rounded-none bg-blue-700 text-yellow-200 py-3 hover:bg-blue-900 hover:text-yellow-500">Login</button>
+      </form>
+
+    </div>
+  )
+}
+```
+
+## 4. Get All Blogs (authenticated)
+Now let's create some queries and mutations (placed them under `graphql/queries`, `graphql/mutations` and `graphql/fragments`):
+```graphql
+query Blogs {
+  blogs {
+    id
+    title
+    description
+    user {
+      email
+      fullName
     }
   }
-  throw error;
 }
 ```
+
+Now generate the types by running the pnpm command:
+```sh
+npm run codegen
+```
+
+#### Get all blogs
+Now let's create a route for the `/blogs` endpoint by generating a folder `blogs` with a `page.tsx` file that will be rendering the page. It will be a server component:
+```js
+import { Blog, BlogsDoc } from "@/graphql/generated";
+import serverQuery from "@/lib/server-query";
+import Link from "next/link";
+
+export default async function BlogsPage() {
+  // A functions that handles the queries and redirects by reading the code of the error (that comes from our backend).
+  // Still need to find a way to add a flash notice with the error. Through the headers or params?
+  const data = await serverQuery(BlogsDoc);
+  
+  // Before trying to redirect I used directly the appollo query:
+  // const { data } = await query({query: BlogsDoc});
+  
+  return (
+    <div className="mx-5">
+      <h1 className="text-4xl mt-5 mb-5 text-center">MY BLOGS</h1>
+
+      <ul>
+        {data.blogs.map((blog: Blog, idx: number) => {
+          return <li key={idx}><Link href={`/blogs/${blog.id}`} className="hover:text-orange-800">{blog.title}</Link></li>
+        })}
+      </ul>
+    </div>
+  )
+}
+```
+
+We can now get all blogs.

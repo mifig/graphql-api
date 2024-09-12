@@ -1,7 +1,7 @@
 import { ApolloLink } from '@apollo/client';
 import { cookies } from 'next/headers';
 
-const publicPaths = ['/', '/login', '/signup'];
+const publicPaths = ['/login', '/signup'];
 
 export const createServerAuthLink = (getPathname: () => string) => {
   return new ApolloLink((operation, forward) => {

@@ -1,9 +1,14 @@
 import { Blog, BlogsDoc } from "@/graphql/generated";
-import { query } from "@/lib/apollo-client";
+import serverQuery from "@/lib/server-query";
 import Link from "next/link";
 
 export default async function BlogsPage() {
-  const { error, data } = await query({query: BlogsDoc});
+  // A functions that handles the queries and redirects by reading the code of the error (that comes from our backend).
+  // Still need to find a way to add a flash notice with the error. Through the headers or params?
+  
+  const data = await serverQuery(BlogsDoc);
+  // Before trying to redirect I used directly the appollo query:
+  // const { data } = await query({query: BlogsDoc});
   
   return (
     <div className="mx-5">

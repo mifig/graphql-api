@@ -9,11 +9,13 @@ export default async function serverQuery<T>(query: DocumentNode, variables?: Re
       variables,
     });
     return data;
-  } catch (error) {
+  } catch (error: any) {
+    error.graphQLErrors.forEach((graphQLError: any) => {
+      if (graphQLError.code === 401) {
+        redirect('/login');
+      }
+    })
 
-    if (error.graphQLErrors[0].code === 401) {
-      redirect('/login');
-    }
     throw error;
   }
 }

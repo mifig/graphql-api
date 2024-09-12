@@ -1,0 +1,10 @@
+mutation Authenticate($token: String!) {
+	sessionValidate(input: { token: $token }) {
+		token
+		user {
+			email
+			fullName
+			id
+		}
+	}
+}

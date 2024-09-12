@@ -1,0 +1,10 @@
+mutation Login($data: CreateSessionInput!) {
+  sessionCreate(input: { data: $data }) {
+    user {
+      id
+      fullName
+      email
+    }
+    token
+  }
+}

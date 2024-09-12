@@ -1,0 +1,23 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin: auto;
+  margin-top: 80px;
+  max-width: 500px;
+}
+
+.form-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-input {
+  padding: 8px;
+}
+
+.form-button {
+  padding: 10px 12px;
+  cursor: pointer;
+}

@@ -1,0 +1,11 @@
+query Blogs {
+  blogs {
+    id
+    title
+    description
+    user {
+      email
+      fullName
+    }
+  }
+}

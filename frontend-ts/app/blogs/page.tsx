@@ -12,11 +12,16 @@ export default async function BlogsPage() {
   
   return (
     <div className="mx-5">
-      <h1 className="text-4xl mt-5 mb-5 text-center">MY BLOGS</h1>
+      <h1 className="text-4xl mb-5 text-center">MY BLOGS</h1>
 
       <ul>
         {data.blogs.map((blog: Blog, idx: number) => {
-          return <li key={idx}><Link href={`/blogs/${blog.id}`} className="hover:text-orange-800">{blog.title}</Link></li>
+          return (
+            <div key={idx}>
+              <li className="p-3"><Link href={`/blogs/${blog.id}`} className="hover:text-orange-800">{blog.title}</Link></li>
+              <hr />
+            </div>
+          )
         })}
       </ul>
     </div>

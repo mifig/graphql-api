@@ -4,6 +4,7 @@ import "./globals.css";
 import { ApolloWrapper } from "@/lib/apollo-wrapper";
 import { getFlashNotice } from '@/lib/flash-notice';
 import FlashNotice from '@/components/FlashNotice';
+import Navbar from "@/components/Navbar";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -22,7 +23,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="min-h-dvh">
       <body className={`${inter.className} bg-yellow-200 text-blue-700`}>
-        <ApolloWrapper>{children}</ApolloWrapper>
+        <ApolloWrapper>
+          <Navbar></Navbar>
+          <div className="pt-20">
+            {children}
+          </div>
+        </ApolloWrapper>
         <FlashNotice initialMessage={flashNotice} />
       </body>
     </html>

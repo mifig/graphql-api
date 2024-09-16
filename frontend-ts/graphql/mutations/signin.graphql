@@ -1,0 +1,10 @@
+mutation Signin($data: CreateRegistrationInput!) {
+  registrationCreate(input: { data: $data }) {
+    user {
+      id
+      fullName
+      email
+    }
+    token
+  }
+}

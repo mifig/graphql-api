@@ -1,17 +1,17 @@
 'use client'
 
 import React from "react"
-import { login } from '@/actions/auth';
+import { signin } from '@/actions/auth';
 import { useFormState } from "react-dom";
 import FlashNotice from "@/components/FlashNotice";
 
 export default function LoginPage({searchParams}: any) {
-  const [state, formAction] = useFormState(login, '')
+  const [state, formAction] = useFormState(signin, '')
   const id = React.useId()
 
   return (
     <div className="flex w-100 flex-col justify-center mt-5">
-      <h1 className="text-4xl mb-10 text-center font-bold mb-5">LOG IN</h1>
+      <h1 className="text-4xl mb-10 text-center font-bold mb-5">SIGN IN</h1>
       
       {searchParams && <FlashNotice initialMessage={searchParams.error}></FlashNotice>}
       
@@ -22,6 +22,14 @@ export default function LoginPage({searchParams}: any) {
       }
       
       <form action={formAction} className="w-full max-w-80 flex flex-col gap-4 self-center">
+        <div className="flex flex-col">
+          <label htmlFor="firstName">First Name</label>
+          <input id="firstName" name="firstName" type="text" className="p-2"/>
+        </div>
+        <div className="flex flex-col">
+          <label htmlFor="lastName">Last Name</label>
+          <input id="lastName" name="lastName" type="text" className="p-2"/>
+        </div>
         <div className="flex flex-col">
           <label htmlFor="email">Email</label>
           <input id="email" name="email" type="email" className="p-2"/>

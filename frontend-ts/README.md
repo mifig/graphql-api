@@ -509,3 +509,151 @@ export default async function BlogsPage() {
 ```
 
 We can now get all blogs.
+
+## 5. Logout
+Add logout action function:
+```js
+// actions/auth.tsx
+
+...
+
+export async function logout() {
+  cookies().delete('jwtToken')
+  redirect('/login')
+}
+```
+
+Create a Navbar component to haev the signin, login and logout buttons:
+```js
+// components/Navbar
+
+import React from 'react';
+import Image from 'next/image'
+import Link from 'next/link';
+import { cookies } from 'next/headers';
+import Logout from '@/components/Logout'
+
+function Navbar() {
+  return (
+    <div className='flex p-2 bg-blue-700 text-white-200 fixed w-full justify-between'>
+      <Link href="/blogs"><Image src="/images/logo.webp" width={50} height={50} alt="Logo" /></Link>
+      {cookies().get("jwtToken")?.value ? 
+        <Logout></Logout>
+        :
+        <div className='flex gap-3'>
+          <Link href="/signin" className='text-yellow-200 self-center py-2 px-3'>Sign-in</Link>
+          <Link href="/login" className='bg-yellow-200 self-center py-2 px-3'>Log-in</Link>
+        </div>
+      }
+    </div>
+  )
+}
+
+export default Navbar;
+```
+
+## 6. Sign Up
+Add signin action:
+```js
+// actions/auth.tsx
+
+export async function signin(state: any, formData: FormData) {
+  try {
+    const { data } = await apolloClient.mutate({
+      mutation: SigninDoc, 
+      variables: {
+        data: {
+          email: formData.get("email"),
+          password: formData.get("password"),
+          firstName: formData.get("firstName"),
+          lastName: formData.get("lastName")
+        }
+      }
+    })
+    
+    cookies().set('jwtToken', data.registrationCreate.token)
+    setFlashNotice("Welcome!")
+  } catch(error: any) {
+    return { ...error }
+  }
+
+  redirect("/blogs")
+}
+```
+
+Create Signin mutation in `graphql/mutations/signin.graphql`:
+```graphql
+mutation Signin($data: CreateRegistrationInput!) {
+  registrationCreate(input: { data: $data }) {
+    user {
+      id
+      fullName
+      email
+    }
+    token
+  }
+}
+```
+
+Rerun codegen:
+```sh
+npm run codegen
+```
+
+Create Sign in page:
+```js
+// signin/page.tsx
+
+'use client'
+
+import React from "react"
+import { signin } from '@/actions/auth';
+import { useFormState } from "react-dom";
+import FlashNotice from "@/components/FlashNotice";
+
+export default function LoginPage({searchParams}: any) {
+  const [state, formAction] = useFormState(signin, '')
+  const id = React.useId()
+
+  return (
+    <div className="flex w-100 flex-col justify-center mt-5">
+      <h1 className="text-4xl mb-10 text-center font-bold mb-5">SIGN IN</h1>
+      
+      {searchParams && <FlashNotice initialMessage={searchParams.error}></FlashNotice>}
+      
+      {state?.graphQLErrors && 
+        state.graphQLErrors.map((error: any) => {
+          return <FlashNotice initialMessage={error.message}></FlashNotice>
+        })
+      }
+      
+      <form action={formAction} className="w-full max-w-80 flex flex-col gap-4 self-center">
+        <div className="flex flex-col">
+          <label htmlFor="firstName">First Name</label>
+          <input id="firstName" name="firstName" type="text" className="p-2"/>
+        </div>
+        <div className="flex flex-col">
+          <label htmlFor="lastName">Last Name</label>
+          <input id="lastName" name="lastName" type="text" className="p-2"/>
+        </div>
+        <div className="flex flex-col">
+          <label htmlFor="email">Email</label>
+          <input id="email" name="email" type="email" className="p-2"/>
+        </div>
+        <div className="flex flex-col mb-3">
+          <label htmlFor="password">Password</label>
+          <input id="password" name="password" type="password" className="p-2"/>
+        </div>
+        <button type="submit" className="rounded-none bg-blue-700 text-yellow-200 py-3 hover:bg-blue-900 hover:text-yellow-500">Login</button>
+      </form>
+
+    </div>
+  )
+}
+```
+
+## 7. Delete Blog Post
+
+## 7. Create Blog Post
+
+## 7. Update Blog Post

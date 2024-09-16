@@ -6,7 +6,7 @@ import { cookies } from 'next/headers'
 import { redirect } from "next/navigation";
 import { setFlashNotice } from "@/lib/flash-notice";
 
-export async function login(state: any, formData: FormData) {
+export async function login(state: any, formData: any) {
   try {
     const { data } = await apolloClient.mutate({
       mutation: LoginDoc, 
@@ -18,15 +18,17 @@ export async function login(state: any, formData: FormData) {
       }
     })
     
-    cookies().set('jwtToken', data.sessionCreate.token)
+    if (data?.sessionCreate) {
+      cookies().set('jwtToken', data.sessionCreate.token)
+    }
   } catch(error: any) {
-    return { ...error }
+    return { error: error.graphQLErrors[0].message }
   }
 
   redirect("/blogs")
 }
 
-export async function signin(state: any, formData: FormData) {
+export async function signin(state: any, formData: any) {
   try {
     const { data } = await apolloClient.mutate({
       mutation: SigninDoc, 
@@ -40,8 +42,10 @@ export async function signin(state: any, formData: FormData) {
       }
     })
     
-    cookies().set('jwtToken', data.registrationCreate.token)
-    setFlashNotice("Welcome!")
+    if (data?.registrationCreate) {
+      cookies().set('jwtToken', data.registrationCreate.token)
+      setFlashNotice("Welcome!")
+    }
   } catch(error: any) {
     return { ...error }
   }

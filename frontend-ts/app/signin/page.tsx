@@ -17,7 +17,7 @@ export default function LoginPage({searchParams}: any) {
       
       {state?.graphQLErrors && 
         state.graphQLErrors.map((error: any) => {
-          return <FlashNotice initialMessage={error.message}></FlashNotice>
+          return <FlashNotice key={id} initialMessage={error.message}></FlashNotice>
         })
       }
       

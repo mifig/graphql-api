@@ -4,9 +4,10 @@ import React from "react"
 import { login } from '@/actions/auth';
 import { useFormState } from "react-dom";
 import FlashNotice from "@/components/FlashNotice";
+import FormSubmit from "@/components/FormSubmit";
 
 export default function LoginPage({searchParams}: any) {
-  const [state, formAction] = useFormState(login, '')
+  const [state, formAction] = useFormState(login, { error: null })
   const id = React.useId()
 
   return (
@@ -14,11 +15,8 @@ export default function LoginPage({searchParams}: any) {
       <h1 className="text-4xl mb-10 text-center font-bold mb-5">LOG IN</h1>
       
       {searchParams && <FlashNotice initialMessage={searchParams.error}></FlashNotice>}
-      
-      {state?.graphQLErrors && 
-        state.graphQLErrors.map((error: any) => {
-          return <FlashNotice initialMessage={error.message}></FlashNotice>
-        })
+      {state.error &&
+        <FlashNotice initialMessage={state.error}></FlashNotice>
       }
       
       <form action={formAction} className="w-full max-w-80 flex flex-col gap-4 self-center">
@@ -30,7 +28,7 @@ export default function LoginPage({searchParams}: any) {
           <label htmlFor="password">Password</label>
           <input id="password" name="password" type="password" className="p-2"/>
         </div>
-        <button type="submit" className="rounded-none bg-blue-700 text-yellow-200 py-3 hover:bg-blue-900 hover:text-yellow-500">Login</button>
+        <FormSubmit></FormSubmit>
       </form>
 
     </div>

@@ -20,6 +20,7 @@ export default async function serverQuery<T>(query: DocumentNode, variables?: Re
       // }
     })
 
-    throw error;
+    // throw error;
+    return { error: "Not Found" }
   }
 }

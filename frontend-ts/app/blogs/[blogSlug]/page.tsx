@@ -1,8 +1,13 @@
 import { BlogDoc } from "@/graphql/generated";
 import serverQuery from "@/lib/server-query";
+import { notFound } from "next/navigation";
 
-export default async function BlogPage({ params }: Record<string, any>) {
-  const data = await serverQuery(BlogDoc, { blogId: params.blogSlug });
+export default async function BlogPage({ params }: {params: String | any }) {
+  const data: { blog: any } | any = await serverQuery(BlogDoc, { blogId: params.blogSlug });
+
+  if (data.error) {
+    notFound()
+  }
   
   return (
     <div className="mx-5">

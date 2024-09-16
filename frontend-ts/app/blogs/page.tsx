@@ -5,7 +5,7 @@ import Link from "next/link";
 export default async function BlogsPage() {
   // A functions that handles the queries and redirects by reading the code of the error (that comes from our backend).
   // Still need to find a way to add a flash notice with the error. Through the headers or params?
-  const data = await serverQuery(BlogsDoc);
+  const data: {blogs: Array<Blog> } = await serverQuery(BlogsDoc);
   
   // Before trying to redirect I used directly the appollo query:
   // const { data } = await query({query: BlogsDoc});

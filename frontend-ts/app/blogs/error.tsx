@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 
-export default function BlogError({ error }: { error: Error}) {
+export default function Error({ error }: { error: Error}) {
   const parsedError: {error: string, code: number} = JSON.parse(error.message)
 
   return (

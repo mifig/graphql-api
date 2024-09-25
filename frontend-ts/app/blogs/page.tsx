@@ -4,8 +4,8 @@ import serverQuery from "@/lib/server-query";
 import Link from "next/link";
 
 export default async function BlogsPage() {
-  const data: { blogs: Array<Blog> } | undefined = await serverQuery(BlogsDoc);
-  
+  const data: {blogs: Blog[]} | undefined = await serverQuery(BlogsDoc);
+
   return (
     <div className="mx-5">
       <h1 className="text-4xl mb-5 text-center">MY BLOGS</h1>

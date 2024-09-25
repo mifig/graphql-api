@@ -3,7 +3,11 @@
 import Link from "next/link"
 
 export default function Error({ error }: { error: Error}) {
-  const parsedError: {error: string, code: number} = JSON.parse(error.message)
+  try {
+    const parsedError: {error: string, code: number} = JSON.parse(error.message)
+  } catch (e) {
+    console.error("Error parsing error message:", e); // Log the parsing error for debugging
+  }
 
   return (
     <div className="flex flex-col gap-5 items-center mt-20">

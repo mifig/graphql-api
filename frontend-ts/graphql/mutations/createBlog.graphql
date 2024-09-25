@@ -1,0 +1,9 @@
+mutation BlogCreate($data: CreateBlogInput!) {
+	blogCreate(input: { data: $data }) {
+		blog {
+			id
+			title
+			description
+		}
+	}
+}

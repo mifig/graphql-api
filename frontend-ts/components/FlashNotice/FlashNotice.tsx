@@ -1,16 +1,30 @@
-'use client'
+"use client";
 
-import React from 'react';
+import React from "react";
+import { Flash } from "@/types/types";
+import toast from 'react-hot-toast';
 
-export default function FlashNotice({ initialMessage }: { initialMessage: string | undefined }) {
-  const [message, setMessage] = React.useState(initialMessage);
+export default function FlashNotice({ 
+  flashNotices, 
+  deleteFlashNotice 
+}: {
+  flashNotices: Flash[], 
+  deleteFlashNotice: (id: string) => Promise<void> 
+}) {
+  React.useEffect(() => {
+    if (flashNotices) {
+      flashNotices.forEach((notice) => {
+        if (notice.variant === "error") {
+          toast.error(notice.message);
+        } else if (notice.variant === "notice") {
+          toast.success(notice.message);
+        } else if (notice.variant === "alert") {
+          toast.error(notice.message)
+        }
+        deleteFlashNotice(notice.id);
+      });
+    }
+  }, [flashNotices]);
 
-  if (!message) return null;
-
-  return (
-    <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded absolute right-6 bottom-6" role="alert">
-      <span className="block sm:inline">🔔 {message}</span>
-    </div>
-  );
+  return null;
 }
-

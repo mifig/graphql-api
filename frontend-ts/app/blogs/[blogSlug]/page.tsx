@@ -1,6 +1,7 @@
 import { BlogDoc } from "@/graphql/generated";
 import serverQuery from "@/lib/server-query";
 import { notFound } from "next/navigation";
+import DeleteBlogForm from "@/components/DeleteBlogForm";
 
 export default async function BlogPage({ params }: {params: String | any }) {
   const data: { blog: any } | any = await serverQuery(BlogDoc, { blogId: params.blogSlug });
@@ -16,6 +17,8 @@ export default async function BlogPage({ params }: {params: String | any }) {
       <text>
         {data.blog.description}
       </text>
+
+      <DeleteBlogForm blogId={params.blogSlug} />
     </div>
   )
 }

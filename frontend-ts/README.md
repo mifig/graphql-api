@@ -388,7 +388,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { ApolloWrapper } from "@/lib/apollo-wrapper";
-import { getFlashNotice } from '@/lib/flash-notice';
+import { getFlashNotice } from '@/actions/flash-notice';
 import FlashNotice from '@/components/FlashNotice';
 
 const inter = Inter({ subsets: ["latin"] });

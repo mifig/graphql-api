@@ -1,29 +1,22 @@
+import BlogCard from "@/components/BlogCard/BlogCard";
 import { Blog, BlogsDoc } from "@/graphql/generated";
 import serverQuery from "@/lib/server-query";
 import Link from "next/link";
 
 export default async function BlogsPage() {
-  // A functions that handles the queries and redirects by reading the code of the error (that comes from our backend).
-  // Still need to find a way to add a flash notice with the error. Through the headers or params?
-  const data: {blogs: Array<Blog> } = await serverQuery(BlogsDoc);
-  
-  // Before trying to redirect I used directly the appollo query:
-  // const { data } = await query({query: BlogsDoc});
+  const data: { blogs: Array<Blog> } | undefined = await serverQuery(BlogsDoc);
   
   return (
     <div className="mx-5">
       <h1 className="text-4xl mb-5 text-center">MY BLOGS</h1>
 
-      <ul>
-        {data.blogs.map((blog: Blog, idx: number) => {
-          return (
-            <div key={idx}>
-              <li className="p-3"><Link href={`/blogs/${blog.id}`} className="hover:text-orange-800">{blog.title}</Link></li>
-              <hr />
-            </div>
-          )
+      <Link href="/blogs/new" className="bg-blue-700 hover:bg-blue-900 text-yellow-200 px-3 py-2 mb-5 block w-fit">+ Create Blog</Link>
+
+      <div className="flex flex-col gap-2">
+        {data!.blogs.map((blog: Blog, idx: number) => {
+          return <BlogCard key={idx} blog={blog} />
         })}
-      </ul>
+      </div>
     </div>
   )
 }

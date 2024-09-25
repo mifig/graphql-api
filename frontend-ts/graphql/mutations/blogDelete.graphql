@@ -1,0 +1,7 @@
+mutation BlogDelete($blogId: ID!) {
+	blogDelete(input: { blogId: $blogId }) {
+		blog {
+			title
+		}
+	}
+}

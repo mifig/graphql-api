@@ -1,6 +1,5 @@
 import { DocumentNode } from 'graphql';
 import { getClient } from './apollo-client';
-import { redirect } from 'next/navigation';
 
 export default async function serverQuery<T>(query: DocumentNode, variables?: Record<string, any>) {
   try {
@@ -10,17 +9,9 @@ export default async function serverQuery<T>(query: DocumentNode, variables?: Re
     });
     return data;
   } catch (error: any) {
-    error.graphQLErrors.forEach((graphQLError: any) => {
-      console.log(graphQLError)
-      if (graphQLError.code === 401) {
-        redirect(`/login?error=${graphQLError.message}&code=${graphQLError.code}`);
-      } 
-      // else if(graphQLError.code === 401) {
-      //   redirect(`/login?error=${graphQLError.message}&code=${graphQLError.code}`);
-      // }
-    })
-
-    // throw error;
-    return { error: "Not Found" }
+    if (error.graphQLErrors) {
+      const firstError = { error: error.graphQLErrors[0].message, code: error.graphQLErrors[0].code }
+      throw new Error(JSON.stringify(firstError))
+   }
   }
 }

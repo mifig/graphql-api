@@ -12,7 +12,7 @@ module Mutations
 
       def resolve(data:)
         user = ::User.new(**data)
-        raise execution_error(message: "Error creating user", extensions: user.errors.to_hash) unless user.save
+        raise execution_error(message: "Please fill in all inputs.", extensions: user.errors.to_hash) unless user.save
 
         token = JWT.encode({user_id: user.id, exp: Time.now.to_i + 86_400}, ENV["JWT_SECRET"], 'HS256')
 

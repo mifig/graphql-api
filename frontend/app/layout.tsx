@@ -24,7 +24,6 @@ export default async function RootLayout({
       <body className={`${inter.className} bg-yellow-200 text-blue-700`}>
         <ToasterProvider>
           <ApolloWrapper>
-
             <Navbar></Navbar>
             <div className="pt-20">
               {children}

@@ -1,36 +1,731 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# Next.js project with TypeScript, Tailwind, ApolloClient (Client & Server)
+## 1. Setup
+### 1.1. Create Next.js app
+```sh
+npx create-next-app@latest
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 1.2. Install Apollo
+```sh
+npm install @apollo/client @apollo/experimental-nextjs-app-support graphql
+```
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+First of all, we will need to create a Next.js link to handle the authentication (placing the jwtToken received by the backend and stored in the cookies as the Bearer token of our requests, except for the login and signup routes for now):
+```js
+// lib/apollo-auth-link.ts
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+import { ApolloLink } from '@apollo/client';
+import { cookies } from 'next/headers';
 
-## Learn More
+const publicPaths = ['/login', '/signup'];
 
-To learn more about Next.js, take a look at the following resources:
+export const createServerAuthLink = (getPathname: () => string) => {
+  return new ApolloLink((operation, forward) => {
+    const pathname = getPathname();
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+    if (!publicPaths.includes(pathname)) {
+      const cookieStore = cookies();
+      const token = cookieStore.get('jwtToken')?.value;
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+      operation.setContext(({ headers = {} }) => ({
+        headers: {
+          ...headers,
+          authorization: token ? `Bearer ${token}` : '',
+        },
+      }));
+    }
 
-## Deploy on Vercel
+    return forward(operation);
+  });
+};
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+#### Now, we can configure Apollo Client for Server Components (already with the authlink):
+```ts
+// apollo-client.ts
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+import { ApolloClient, HttpLink, InMemoryCache, from } from "@apollo/client";
+import { registerApolloClient } from "@apollo/experimental-nextjs-app-support";
+import { createServerAuthLink } from '@/lib/apollo-auth-link';
+import { headers } from 'next/headers';
+
+const graphqlUrl = process.env.NODE_ENV === "development" ? 'http://127.0.0.1:3000/graphql' : 'https://graphql-test-43ead3251c1a.herokuapp.com/graphql';
+
+// Apollo client for queries:
+export const { getClient, query } = registerApolloClient(() => {
+  const httpLink = new HttpLink({
+    uri: graphqlUrl,
+  });
+  
+  const authLink = createServerAuthLink(() => headers().get('x-invoke-path') || '');
+
+  return new ApolloClient({
+    cache: new InMemoryCache(),
+    link: from([authLink, httpLink]),
+  });
+});
+
+// Apollo client for mutations:
+const httpLink = new HttpLink({
+  uri: graphqlUrl,
+});
+
+const authLink = createServerAuthLink(() => headers().get('x-invoke-path') || '');
+
+export const apolloClient = new ApolloClient({
+  cache: new InMemoryCache(),
+  link: from([authLink, httpLink]),
+});
+```
+
+Let's now wrap it in another function that will allow us to do the query call and catch any errors that might occur (unauthorized, not found, etc...). This is the method we'll use to make server queries:
+```ts
+// lib/server-query.ts
+
+import { DocumentNode } from 'graphql';
+import { getClient } from './apollo-client';
+
+export default async function serverQuery<T>(query: DocumentNode, variables?: Record<string, any>) {
+  try {
+    const { data } = await getClient().query<T>({
+      query, 
+      variables
+    });
+    return data;
+  } catch (error: any) {
+    if (error.graphQLErrors) {
+      const firstError = { error: error.graphQLErrors[0].message, code: error.graphQLErrors[0].code }
+      throw new Error(JSON.stringify(firstError))
+   }
+  }
+}
+```
+
+In the code above we are raising an error that will trigger an error.tsx page. We still need to correct the error throwing in production, since the error is production is not visible yet.
+
+#### And we can configure Apollo Client for Client Components as well:
+```ts
+// /lib/apollo_wrapper.tsx
+
+"use client";
+
+import {
+  ApolloLink,
+  HttpLink,
+} from "@apollo/client";
+
+import {
+  ApolloNextAppProvider,
+  ApolloClient,
+  InMemoryCache,
+  SSRMultipartLink,
+} from "@apollo/experimental-nextjs-app-support";
+
+function makeClient() {
+  const graphqlUrl = process.env.NODE_ENV === "development" ? 'http://127.0.0.1:3000/graphql' : 'https://graphql-test-43ead3251c1a.herokuapp.com/graphql';
+
+  const httpLink = new HttpLink({
+      uri: graphqlUrl,
+  });
+
+  return new ApolloClient({
+    cache: new InMemoryCache(),
+    link:
+      typeof window === "undefined"
+        ? ApolloLink.from([
+            new SSRMultipartLink({
+              stripDefer: true,
+            }),
+            httpLink,
+          ])
+        : httpLink,
+  });
+}
+
+export function ApolloWrapper({ children }: React.PropsWithChildren) {
+  return (
+    <ApolloNextAppProvider makeClient={makeClient}>{children}</ApolloNextAppProvider>
+  );
+}
+```
+
+And now just add the wrapper to the layout, so that every client component gets the same ApolloClient (no repeated queries):
+```js
+// /app/layout.tsx
+
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { ApolloWrapper } from "@/lib/apollo-wrapper";
+import Navbar from "@/components/Navbar";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "Create Next App",
+  description: "Generated by create next app",
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body className={inter.className}>
+        <ApolloWrapper>
+          <Navbar></Navbar>
+          <div className="pt-20">
+            {children}
+          </div>
+        </ApolloWrapper>
+      </body>
+    </html>
+  );
+}
+```
+
+### 1.3. Install codegen
+This will allow us to read the types from graphql (bakend) and generate TypeScript types to the frontend
+
+#### In Rails Api generate rake task to dump graphql schema into a file to be copied to frontend:
+```ruby
+# /lib/tasks/graphql.rake
+#frozen_string_literal: true
+
+require 'graphql/rake_task'
+
+GraphQL::RakeTask.new(schema_name: 'GraphqlApiSchema')
+```
+
+Run task to generate `schema.graphql` file:
+```sh
+rails graphql:schema:dump
+```
+
+#### Install codegen in frontend app:
+```sh
+npm add graphql                              
+npm add typescript @graphql-codegen/cli
+```
+
+Copy backend generated `schema.graphql` to frontend `/graphql` and create `/graphql/codegen.yml` with following configuration:
+```yml
+---
+overwrite: true
+schema: graphql/schema.graphql
+documents: graphql/*/*.graphql
+
+generates:
+  graphql/generated.tsx:
+    plugins:
+      - typescript
+      - typescript-operations
+      - typed-document-node
+      # - typescript-react-apollo
+    config:
+      documentVariableSuffix: 'Doc'
+```
+
+Create script to run codegen configuration and generate types file:
+```json
+// package.json
+  ...
+  "scripts": {
+    ...
+    "codegen": "npx graphql-codegen --config graphql/codegen.yml"
+  },
+```
+
+## 2. Authentication
+### 2.1. Login:
+Follow steps of codegen to regenerate the schema of graphql after adding the login mutation:
+```js
+// /graphql/mutations/login.graphql
+mutation Login($data: CreateSessionInput!) {
+  sessionCreate(input: { data: $data }) {
+    user {
+      id
+      fullName
+      email
+    }
+    token
+  }
+}
+```
+
+### 2.2. Create login page.tsx:
+```js
+// /app/login/page.tsx:
+
+'use client'
+
+import React from "react"
+import { login } from '@/actions/auth';
+import { useFormState } from "react-dom";
+import FormSubmit from "@/components/FormSubmit";
+import FormInput from "@/components/FormInput/FormInput";
+
+export default function LoginPage() {
+  const [state, formAction] = useFormState(login, { error: null })
+
+  return (
+    <div className="flex w-100 flex-col justify-center mt-5">
+      <h1 className="text-4xl mb-10 text-center font-bold mb-5">LOG IN</h1>
+      
+      <form action={formAction} className="w-full max-w-80 flex flex-col gap-4 self-center">
+        <FormInput type="email" label="Email" error={state.error} id="email" name="email"></FormInput>
+        <FormInput type="password" label="Password" error={state.error} id="password" name="password"></FormInput>
+        <FormSubmit>Log In</FormSubmit>
+      </form>
+    </div>
+  )
+}
+```
+
+Generate the server action `login` in `/actions/auth.ts` to be called when the form is submitted (this script already has as well the sign in and logout functions):
+```js
+// /actions/auth.ts
+
+"use server";
+
+import { LoginDoc, SigninDoc } from "@/graphql/generated";
+import { apolloClient } from "@/lib/apollo-client";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { setFlashNotice } from "@/actions/flash-notice";
+import { revalidatePath } from "next/cache";
+
+export async function login(state: any, formData: any) {
+  try {
+    const { data } = await apolloClient.mutate({
+      mutation: LoginDoc,
+      variables: {
+        data: {
+          email: formData.get("email"),
+          password: formData.get("password"),
+        },
+      },
+    });
+
+    if (data?.sessionCreate) {
+      cookies().set("jwtToken", data.sessionCreate.token);
+      await setFlashNotice({ message: "Welcome!", variant: "notice" });
+    }
+  } catch (error: any) {
+    console.log(error.graphQLErrors)
+    await setFlashNotice({ message: error.graphQLErrors[0].message, variant: "error" });
+    return { error: error.graphQLErrors[0].message };
+  }
+
+  revalidatePath("/", "layout");
+  redirect("/blogs");
+}
+
+export async function signin(state: any, formData: any) {
+  try {
+    const { data } = await apolloClient.mutate({
+      mutation: SigninDoc,
+      variables: {
+        data: {
+          email: formData.get("email"),
+          password: formData.get("password"),
+          firstName: formData.get("firstName"),
+          lastName: formData.get("lastName"),
+        },
+      },
+    });
+
+    if (data?.registrationCreate) {
+      cookies().set("jwtToken", data.registrationCreate.token);
+      await setFlashNotice({ message: "Welcome!", variant: "notice" });
+    }
+  } catch (error: any) {
+    await setFlashNotice({ message: error.graphQLErrors[0].message, variant: "error" });
+    return { error: error.graphQLErrors[0].message };
+  }
+
+  redirect("/blogs");
+}
+
+export async function logout() {
+  cookies().delete("jwtToken");
+  await setFlashNotice({ message: "Good Bye!", variant: "notice" });
+  redirect("/login");
+}
+```
+
+We can now Login and we will be redirected to `/blogs`. If credentials are wrong we will be shown a flash notice. But for that to occur, we also need to set the logic for the `setFlashNotice` method.
+
+## 3. Adding flash notices
+Create the add, delete and get flash notice to handle the flash notice messages:
+```js
+// lib/flash-notice.ts
+
+"use server";
+
+import { cookies } from "next/headers";
+import { FlashInput } from "@/types/types";
+
+export async function getFlashNotice() {
+  const flashNotice = cookies().get("flash");
+
+  if (flashNotice?.value) {
+    return JSON.parse(flashNotice.value);
+  }
+
+  return;
+}
+
+export async function setFlashNotice({ variant, message }: FlashInput) {  
+  cookies().set("flash", JSON.stringify({ variant, message }), {
+    // maxAge: 5, // Cookie will expire in 5 seconds
+    path: "/",
+  });
+}
+
+export async function deleteFlashNotice() {
+  cookies().delete("flash")
+}
+```
+
+Install the `react-hot-toast` library that will allows us to hanlde the toasts (aka flash notices):
+```sh
+npm install react-hot-toast
+```
+
+Create a toaster provider to wrap our app layout, so that we can trigger the toasts from every route:
+```js
+// /providers/ToasterProvider.tsx
+
+"use client"
+
+import React, { ReactNode } from "react";
+import { Toaster } from 'react-hot-toast'
+
+export default function ToasterProvider({ children }: { children: ReactNode }) {
+  return (
+    <>
+      {children}
+      <Toaster position="bottom-right" />
+    </>
+  )
+}
+```
+
+Create a RSC for handling the flash notices. This handler will get all flash notices in the server and pass it down to its child FlashNotice (a client component that will get both the flash notices gotten from the RSC and the function to delete them, as a server action, because we can only alter cookies in server actions):
+```ts
+// /components/FlashNotice/ToasterHandler.tsx
+
+import { getFlashNotice, deleteFlashNotice } from "@/actions/flash-notice";
+import FlashNotice from "./FlashNotice";
+
+export default async function ToasterHandler() {
+  const flashNotice = await getFlashNotice();
+
+  return <FlashNotice flashNotice={flashNotice} deleteFlashNotice={deleteFlashNotice} />;
+}
+```
+
+Now let's create the Flash Notice itself. This client component will create a toast in the useEffect after any flash notice is added to the cookies through a server action, and will delete it immediatelly so that it doesn't occur again:
+```ts
+// /components/FlashNotice/FlashNotice.tsx
+
+"use client";
+
+import React from "react";
+import { Flash } from "@/types/types";
+import toast from 'react-hot-toast';
+
+export default function FlashNotice({ 
+  flashNotice, 
+  deleteFlashNotice 
+}: {
+  flashNotice: Flash, 
+  deleteFlashNotice: () => Promise<void> 
+}) {
+  React.useEffect(() => {
+    if (flashNotice?.variant === "error") {
+      toast.error(flashNotice.message);
+    } else if (flashNotice?.variant === "notice") {
+      toast.success(flashNotice.message);
+    } else if (flashNotice?.variant === "alert") {
+      toast.error(flashNotice.message)
+    }
+    deleteFlashNotice();
+  }, [flashNotice]);
+
+  return null;
+}
+```
+
+Update layout of app to include the Toaster Provider and the Toaster Handler:
+```ts
+// app/layout.tsx
+
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { ApolloWrapper } from "@/lib/apollo-wrapper";
+import Navbar from "@/components/Navbar";
+import ToasterProvider from "@/providers/ToasterProvider";
+import ToasterHandler from "@/components/FlashNotice/ToasterHandler";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "Create Next App",
+  description: "Generated by create next app",
+};
+
+export default async function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+
+  return (
+    <html lang="en" className="min-h-dvh">
+      <body className={`${inter.className} bg-yellow-200 text-blue-700`}>
+        <ToasterProvider>
+          <ApolloWrapper>
+            <Navbar></Navbar>
+            <div className="pt-20">
+              {children}
+            </div>
+          </ApolloWrapper>
+          <ToasterHandler></ToasterHandler>
+        </ToasterProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+## 4. Get All Blogs (authenticated)
+Now let's create some queries and mutations (placed them under `graphql/queries`, `graphql/mutations` and `graphql/fragments`):
+```graphql
+query Blogs {
+  blogs {
+    id
+    title
+    description
+    user {
+      email
+      fullName
+    }
+  }
+}
+```
+
+Now generate the types by running the pnpm command:
+```sh
+npm run codegen
+```
+
+#### Get all blogs
+Now let's create a route for the `/blogs` endpoint by generating a folder `blogs` with a `page.tsx` file that will be rendering the page. It will be a server component:
+```ts
+// /app/blogs/page.tsx
+
+import BlogCard from "@/components/BlogCard/BlogCard";
+import { Blog, BlogsDoc } from "@/graphql/generated";
+import serverQuery from "@/lib/server-query";
+import Link from "next/link";
+
+export default async function BlogsPage() {
+  const data: {blogs: Blog[]} | undefined = await serverQuery(BlogsDoc);
+
+  return (
+    <div className="mx-5">
+      <h1 className="text-4xl mb-5 text-center">MY BLOGS</h1>
+
+      <Link href="/blogs/new" className="bg-blue-700 hover:bg-blue-900 text-yellow-200 px-3 py-2 mb-5 block w-fit">+ Create Blog</Link>
+
+      <div className="flex flex-col gap-2">
+        {data!.blogs.map((blog: Blog, idx: number) => {
+          return <BlogCard key={idx} blog={blog} />
+        })}
+      </div>
+    </div>
+  )
+}
+```
+
+And create the Blog component:
+```ts
+// /components/BlogCard/BlogCard.tsx
+
+import { Blog } from '@/graphql/generated';
+import React from 'react';
+import Link from 'next/link';
+
+function BlogCard({blog}: {blog: Blog}) {
+  return (
+    <Link href={`/blogs/${blog.id}`}>
+      <div className='bg-yellow-400 text-blue-600 hover:bg-yellow-500'>
+        <p className="p-3">{blog.title}</p>
+      </div>
+    </Link>
+  );
+}
+
+export default BlogCard;
+```
+
+We can now get all blogs. To handle authorization, if the user is not logged in (that is, the jwtToken was not stored in the cookies, and thus the context of our query is not authenticated with the jwtToken as a Bearer token), the query will give an error, so we will create an Error Boundary with `error.tsx` file in our `/blogs` route:
+```ts
+// /app/blogs/error.tsx
+
+"use client"
+
+import Link from "next/link"
+
+export default function Error({ error }: { error: Error}) {
+  try {
+    const parsedError: {error: string, code: number} = JSON.parse(error.message)
+    return (
+      <div className="flex flex-col gap-5 items-center mt-20">
+        <h1 className="text-8xl font-bold">{parsedError.code}</h1>
+        <p>{parsedError.error}</p>
+  
+        {parsedError.code === 401 && <Link href="/login" className="bg-blue-700 px-3 py-2 text-yellow-200 hover:bg-blue-900">Login</Link>}
+      </div>
+    )
+  } catch (e) {
+    return (
+      <div className="flex flex-col gap-5 items-center mt-20">
+        <h1 className="text-8xl font-bold">ERROR</h1>
+        <p>An Error occured</p>
+  
+        <Link href="/login" className="bg-blue-700 px-3 py-2 text-yellow-200 hover:bg-blue-900">Login</Link>
+      </div>
+    )
+  }
+}
+```
+
+## 5. Logout
+We already added befor the logout action function, if not, we should add it now. It will delete the jwtToken from our cookie store, add a flash notice and redirect us to /login:
+```js
+// actions/auth.tsx
+
+...
+
+export async function logout() {
+  cookies().delete("jwtToken");
+  await setFlashNotice({ message: "Good Bye!", variant: "notice" });
+  redirect("/login");
+}
+```
+
+Create a Navbar component to have the signin, login and logout buttons:
+```ts
+// components/Navbar
+
+import React from 'react';
+import Image from 'next/image'
+import Link from 'next/link';
+import { cookies } from 'next/headers';
+import Logout from '@/components/Logout'
+
+function Navbar() {
+  return (
+    <div className='flex p-2 bg-blue-700 text-white-200 fixed w-full justify-between'>
+      <Link href="/blogs"><Image src="/images/logo.webp" width={50} height={50} alt="Logo" /></Link>
+      {cookies().get("jwtToken")?.value ? 
+        <Logout></Logout>
+        :
+        <div className='flex gap-3'>
+          <Link href="/signin" className='text-yellow-200 self-center py-2 px-3'>Sign-in</Link>
+          <Link href="/login" className='bg-yellow-200 self-center py-2 px-3'>Log-in</Link>
+        </div>
+      }
+    </div>
+  )
+}
+
+export default Navbar;
+```
+
+## 6. Sign Up
+We already added the signin action as well:
+```js
+// actions/auth.tsx
+
+export async function signin(state: any, formData: any) {
+  try {
+    const { data } = await apolloClient.mutate({
+      mutation: SigninDoc,
+      variables: {
+        data: {
+          email: formData.get("email"),
+          password: formData.get("password"),
+          firstName: formData.get("firstName"),
+          lastName: formData.get("lastName"),
+        },
+      },
+    });
+
+    if (data?.registrationCreate) {
+      cookies().set("jwtToken", data.registrationCreate.token);
+      await setFlashNotice({ message: "Welcome!", variant: "notice" });
+    }
+  } catch (error: any) {
+    await setFlashNotice({ message: error.graphQLErrors[0].message, variant: "error" });
+    return { error: error.graphQLErrors[0].message };
+  }
+
+  redirect("/blogs");
+}
+```
+
+Create Signin mutation in `graphql/mutations/signin.graphql`:
+```graphql
+mutation Signin($data: CreateRegistrationInput!) {
+  registrationCreate(input: { data: $data }) {
+    user {
+      id
+      fullName
+      email
+    }
+    token
+  }
+}
+```
+
+Rerun codegen:
+```sh
+npm run codegen
+```
+
+Create Sign in page:
+```js
+// signin/page.tsx
+
+'use client'
+
+import React from "react"
+import { signin } from '@/actions/auth';
+import { useFormState } from "react-dom";
+import FormInput from "@/components/FormInput";
+
+export default function SignInPage() {
+  const [state, formAction] = useFormState(signin, { error: null })
+
+  return (
+    <div className="flex w-100 flex-col justify-center mt-5">
+      <h1 className="text-4xl mb-10 text-center font-bold mb-5">SIGN IN</h1>
+      
+      <form action={formAction} className="w-full max-w-80 flex flex-col gap-4 self-center">
+        <FormInput type="text" label="Last Name" error={state.error} id="lastName" name="lastName"></FormInput>
+        <FormInput type="text" label="First Name" error={state.error} id="firstName" name="firstName"></FormInput>
+        <FormInput type="email" label="Email" error={state.error} id="email" name="email"></FormInput>
+        <FormInput type="password" label="Password" error={state.error} id="password" name="password"></FormInput>
+        <button type="submit" className="rounded-none bg-blue-700 text-yellow-200 py-3 hover:bg-blue-900 hover:text-yellow-500">Sign Up</button>
+      </form>
+    </div>
+  )
+}
+```

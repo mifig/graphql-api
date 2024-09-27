@@ -4,6 +4,7 @@ mutation BlogCreate($data: CreateBlogInput!) {
 			id
 			title
 			description
+			
 		}
 	}
 }

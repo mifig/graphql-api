@@ -590,6 +590,24 @@ With the `has_secure_password` method we now have access to the `password` and `
 
 We just need now to add the `gem 'jwt'` to our gemfile so that we can authenticate our users using JSON Web Tokens. Then run `bundle install` in the command line to install the gem.
 
+> **NOTE:** 
+> If you already have an application with devise and wish to migrate it to has_secure_password, you don't need to create the `AddPasswordDigestToUsers` migration, you can just:
+> ```ruby
+> class User < ApplicationRecord
+>   # 1. Take out devise references
+>   # 2. Add password_digest method instead of changing DB schema to maintain existing passwords and schema.
+>
+>   def password_digest
+>     encrypted_password
+>   end
+>   
+>   def password_digest=(value)
+>      self.encrypted_password = value
+>   end 
+> end
+> ```
+> *Reference: [Simple migration from devise to has_secure_password](https://www.reddit.com/r/rails/comments/11852sf/simple_migration_from_devise_to_has_secure/)*
+
 ### 8.2. Registrations
 Let's start by creating an `authentication` folder within our mutations to handle the registrations of users, which will include:
 - Creating a registration (sign-up)

@@ -13,7 +13,7 @@ import {
 } from "@apollo/experimental-nextjs-app-support";
 
 function makeClient() {
-  const graphqlUrl = process.env.NODE_ENV === "development" ? 'http://127.0.0.1:3000/graphql' : 'https://graphql-test-43ead3251c1a.herokuapp.com/graphql';
+  const graphqlUrl = process.env.NODE_ENV === "development" ? 'http://127.0.0.1:3000/graphql' : process.env.GRAPHQL_URL;
 
   const httpLink = new HttpLink({
       uri: graphqlUrl,
